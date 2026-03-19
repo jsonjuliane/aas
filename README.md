@@ -114,15 +114,82 @@ pip install -r requirements.txt
 
 ---
 
-## Running (Phase 1+)
+## Run in Thonny (Windows → Raspberry Pi)
 
-1. Copy `config/contacts.family.json.example` to `config/contacts.family.json` and add real phone numbers.
-2. Open `src/main.py` in Thonny (or run `python -m src.main` from project root).
-3. Press **Run**.
+Follow these steps to clone on Windows, transfer to the Pi, and run in Thonny with hardware.
 
-**Options:**
-- `--dry-run`: Simulate without hardware (for development on Mac/PC).
-- `--trigger`: Force alert on first poll (for testing).
+### 1. Clone on Windows
+
+1. Install [Git for Windows](https://git-scm.com/download/win) if needed.
+2. Open **Command Prompt** or **PowerShell**.
+3. Navigate to the folder where you want the project (e.g. `cd C:\Users\YourName\Documents`).
+4. Clone the repo:
+   ```cmd
+   git clone https://github.com/YOUR_USERNAME/AccidentAlertSystem.git
+   cd AccidentAlertSystem
+   ```
+
+### 2. Transfer to the Raspberry Pi
+
+Copy the `AccidentAlertSystem` folder to the Pi. Options:
+
+- **USB drive**: Copy the folder to a USB stick, plug into the Pi, copy to the Pi (e.g. `~/AccidentAlertSystem`).
+- **Network share**: If the Pi is on the same network, use Samba/Windows share or `scp` from WSL.
+- **Clone directly on Pi**: If the Pi has internet, open Terminal on the Pi and run the same `git clone` command there. Skip step 1.
+
+### 3. Configure Raspberry Pi OS (one-time)
+
+On the Pi, complete `docs/phase0_os_checklist.md`:
+
+- Enable I2C (raspi-config → Interface Options → I2C).
+- Enable serial for SIM800L (raspi-config → Serial → disable login shell, enable hardware).
+- Reboot after each change.
+
+### 4. Install dependencies on the Pi
+
+Open **Terminal** on the Pi:
+
+```bash
+cd ~/AccidentAlertSystem
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+If `RPi.GPIO` or `pyaudio` fail to build, install system packages first:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y python3-venv python3-pip portaudio19-dev
+```
+
+### 5. Set up contacts config
+
+```bash
+cp config/contacts.family.json.example config/contacts.family.json
+```
+
+Edit `config/contacts.family.json` and add real emergency phone numbers (E.164 format, e.g. `+639171234567`).
+
+### 6. Run in Thonny on the Pi
+
+1. Open **Thonny** on the Raspberry Pi (Menu → Programming → Thonny).
+2. **File → Open** → browse to `AccidentAlertSystem/src/main.py`.
+3. **Run → Configure interpreter** → ensure **Raspberry Pi** or **Python 3** is selected.  
+   - If using the venv: **Tools → Options → Interpreter** → choose **Alternative Python 3** → browse to `AccidentAlertSystem/.venv/bin/python3`.
+4. Press **F5** or **Run** to start.
+
+The app will monitor the sensor. On impact, it runs a 5-second countdown; press the cancel button (GPIO 17) to abort, or let it send SMS with GPS location.
+
+### Run from Terminal
+
+From Terminal (with venv activated):
+
+```bash
+python -m src.main              # Normal (with hardware)
+python -m src.main --dry-run     # Simulate without hardware
+python -m src.main --trigger     # Force alert on first poll (for testing)
+```
 
 ---
 
