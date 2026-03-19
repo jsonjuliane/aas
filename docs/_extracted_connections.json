@@ -1,0 +1,162 @@
+{
+  "Sheet1": [
+    [
+      "POWER & REGULATION SUBSYSTEM"
+    ],
+    [
+      "Component",
+      "Connection",
+      "Target / Pin"
+    ],
+    [
+      "Batteries",
+      "2x 18650 Series",
+      "Input to Charging Board/BMS"
+    ],
+    [
+      "Main Switch",
+      "Slide Switch",
+      "Between Battery (+) and Buck Inputs"
+    ],
+    [
+      "Buck 1 (5V)",
+      "Input (+)",
+      "Battery (+) after Switch"
+    ],
+    [
+      "Buck 1 (5V)",
+      "Output (+)",
+      "Pi Pins 2 , MP3 VCC, Buzzer (+)"
+    ],
+    [
+      "Buck 2 (4V)",
+      "Input (+)",
+      "Battery (+) after Switch"
+    ],
+    [
+      "Buck 2 (4V)",
+      "Output (+)",
+      "SIM800L VCC (with 100碌F Capacitor)"
+    ],
+    [
+      "LDO (3.3V)",
+      "Pin 3 (VIN)",
+      "5V Buck Output (with 0.1碌F Capacitor)"
+    ],
+    [
+      "LDO (3.3V)",
+      "Pin 2 (VOUT)",
+      "GPS VCC (with 10碌F Capacitor)"
+    ],
+    [
+      "Ground Hub",
+      "Star Ground",
+      "Battery (-), All Buck Inputs (-), All Component GNDs"
+    ],
+    [
+      "Raspberry Pi Zero W Master Pinout"
+    ],
+    [
+      "Physical Pin",
+      "Function",
+      "Component",
+      "Connection"
+    ],
+    [
+      "Pin 1",
+      "3.3V Out",
+      "MPU-6050",
+      "VCC"
+    ],
+    [
+      "Pin 2",
+      "5V In",
+      "5V Buck",
+      "Output (+)"
+    ],
+    [
+      "Pin 3",
+      "I2C SDA",
+      "MPU-6050",
+      "SDA"
+    ],
+    [
+      "Pin 5",
+      "I2C SCL",
+      "MPU-6050",
+      "SCL"
+    ],
+    [
+      "Pin 6",
+      "GND",
+      "5V Buck",
+      "Output (-)"
+    ],
+    [
+      "Pin 8",
+      "UART TX",
+      "SIM800L",
+      "RXD (Hardware Serial)"
+    ],
+    [
+      "Pin 9",
+      "GND",
+      "SIM800L",
+      "Signal GND"
+    ],
+    [
+      "Pin 10",
+      "UART RX",
+      "SIM800L",
+      "TXD (Hardware Serial)"
+    ],
+    [
+      "Pin 12",
+      "GPIO 18",
+      "Buzzer",
+      "1kΩ Resistor → Transistor Base"
+    ],
+    [
+      "Pin 14",
+      "GND",
+      "MPU-6050",
+      "GND"
+    ],
+    [
+      "Pin 30",
+      "GND",
+      "MP3 Player",
+      "GND"
+    ],
+    [
+      "Pin 35",
+      "GPIO 19",
+      "MP3 Player",
+      "TX (Software Serial)"
+    ],
+    [
+      "Pin 37",
+      "GPIO 26",
+      "MP3 Player",
+      "RX (via 1kΩ Resistor)"
+    ],
+    [
+      "Pin 34",
+      "GND",
+      "GPS Module",
+      "GND"
+    ],
+    [
+      "Pin 38",
+      "GPIO 20",
+      "GPS Module",
+      "TX (Software Serial)"
+    ],
+    [
+      "Pin 40",
+      "GPIO 21",
+      "GPS Module",
+      "RX (Software Serial)"
+    ]
+  ]
+}

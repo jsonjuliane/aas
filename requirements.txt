@@ -1,0 +1,19 @@
+# Smart Helmet Accident Alert System — Dependencies
+# Install: pip install -r requirements.txt
+
+# I2C / MPU6050
+smbus2>=0.4.0
+
+# Serial (GPS, SIM800L, MP3)
+pyserial>=3.5
+
+# Speech recognition (cancel detection)
+SpeechRecognition>=3.10.0
+pyaudio>=0.2.13
+
+# Geofencing / geometry
+shapely>=2.0.0
+
+# Optional: for development/testing without hardware
+# pytest>=7.0.0
+# pytest-cov>=4.0.0
