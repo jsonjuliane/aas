@@ -1,0 +1,15 @@
+{
+  "_comment": "Copy to contacts.barangay.json. Maps barangay names to rescuer phone numbers. Used when rider is inside Biñan, Laguna.",
+  "version": 1,
+  "barangays": [
+    {
+      "name": "Barangay A",
+      "rescuer_phone": "+639191234567"
+    },
+    {
+      "name": "Barangay B",
+      "rescuer_phone": "+639201234567"
+    }
+  ],
+  "default_rescuer_phone": "+639211234567"
+}

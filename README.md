@@ -1,8 +1,8 @@
 # SmartShell — Smart Helmet Accident Alert System
 
-This repository currently contains **planning + hardware wiring specifications** for a Raspberry Pi Zero W–based smart helmet that can detect probable accidents and send SMS alerts with GPS location, with a short cancellation window to prevent false alarms.
+SmartShell is a Raspberry Pi Zero W–based smart helmet that detects probable accidents and sends SMS alerts with GPS location, with a short cancellation window to prevent false alarms.
 
-For the phased development plan, see `docs/PLAN.md`.
+For the phased plan, see `docs/PLAN.md`.
 
 ---
 
@@ -18,7 +18,7 @@ For the phased development plan, see `docs/PLAN.md`.
 - **Buzzer + transistor + 1kΩ resistor** (GPIO 18)
 - **Power**: 2×18650 (series) + charging board/BMS + buck converters (5V and ~4V) + LDO 3.3V for GPS (per wiring spec)
 
-### Wiring (from `docs/Connections.xlsx`)
+### Wiring
 
 | Pi Physical Pin | Function | Module | Wire to |
 |---|---|---|---|
@@ -114,7 +114,19 @@ pip install -r requirements.txt
 
 ---
 
-## Deployment recommendation (when you have runnable code)
+## Running (Phase 1+)
+
+1. Copy `config/contacts.family.json.example` to `config/contacts.family.json` and add real phone numbers.
+2. Open `src/main.py` in Thonny (or run `python -m src.main` from project root).
+3. Press **Run**.
+
+**Options:**
+- `--dry-run`: Simulate without hardware (for development on Mac/PC).
+- `--trigger`: Force alert on first poll (for testing).
+
+---
+
+## Deployment recommendation (Phase 4)
 
 For a helmet device, plan to run the program as a `systemd` service so it:
 - starts on boot
@@ -127,7 +139,7 @@ This is intentionally deferred until Phase 4 in `docs/PLAN.md`, but you can prep
 
 ## What’s in this repo today
 
-- `docs/PLAN.md`: phased plan aligned to your flow + wiring specs
-- `docs/Flow.docx`, `docs/Connections.xlsx`, `docs/smartshell.jpg`: source documentation
-- `requirements.txt`: initial Python dependency list (no application code yet)
+- `src/main.py`: runnable entrypoint (Phase 1)
+- `docs/PLAN.md`: phased plan and wiring
+- `docs/features/`: per-feature documentation
 

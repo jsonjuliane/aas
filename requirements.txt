@@ -14,6 +14,9 @@ pyaudio>=0.2.13
 # Geofencing / geometry
 shapely>=2.0.0
 
+# GPIO (Raspberry Pi only; install fails on non-Pi)
+RPi.GPIO>=0.7.0
+
 # Optional: for development/testing without hardware
 # pytest>=7.0.0
 # pytest-cov>=4.0.0

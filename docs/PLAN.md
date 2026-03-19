@@ -1,10 +1,5 @@
 # SmartShell — Smart Helmet Accident Alert System (Phased Plan)
 
-This plan is derived from:
-- `docs/Flow.docx` (extracted into `docs/_extracted_flow.txt`)
-- `docs/Connections.xlsx` (extracted into `docs/_extracted_connections.json`)
-- `docs/smartshell.jpg` (poster: purpose + feature set)
-
 The intent is to reach a **working base model first**, then iteratively improve reliability, usability, and safety.
 
 ---
@@ -31,7 +26,7 @@ Build an IoT-based smart helmet system that:
 
 ---
 
-## System flow (from Flow.docx)
+## System flow
 
 ### A. Accident detected
 
@@ -51,7 +46,7 @@ Build an IoT-based smart helmet system that:
 
 ---
 
-## Hardware + wiring (from Connections.xlsx)
+## Hardware + wiring
 
 ### Main modules
 
@@ -114,21 +109,29 @@ This plan defines what to add in stages to become a working software base.
 
 **Goal**: lock requirements + interfaces so development is predictable and testable.
 
-- **Deliverables**
-  - Finalized module boundaries (sensor, gps, gsm, audio, cancel, routing, logging)
-  - Config format for contacts + barangay mapping (JSON)
-  - Known-good Pi OS configuration checklist (I2C, serial, audio)
-  - A simple “hardware smoke test” checklist per peripheral (MPU6050 read, GPS NMEA, SIM AT, MP3 play, buzzer)
+- **Deliverables** ✓
+  - Finalized module boundaries → `docs/phase0_module_boundaries.md`
+  - Config format → `docs/phase0_config_format.md`, `config/*.example`
+  - Pi OS checklist → `docs/phase0_os_checklist.md`
+  - Per-feature docs → `docs/features/*.md`
+  - Pin constants → `src/config.py`
 
 - **Exit criteria**
   - Everyone agrees on pinout + routing rules (Biñan vs outside)
-  - Hardware smoke test steps documented and repeatable
+  - Pinout and routing rules agreed
 
 ---
 
-### Phase 1 — Working base model (minimum functioning end-to-end)
+### Phase 1 — Working base model (minimum functioning end-to-end) ✓
 
 **Goal**: a reliable loop that detects a trigger, counts down, and can send an SMS with GPS.
+
+- **Deliverables** ✓
+  - `src/main.py` runnable in Thonny
+  - `src/sensor_mpu6050.py`, `gps.py`, `gsm_sim800l.py`, `audio_mp3.py`, `cancel.py`, `contacts.py`, `logging_store.py`
+  - `config/contacts.family.json.example` — copy to `contacts.family.json`
+  - `assets/audio/` — countdown audio (see README)
+  - `docs/phase1_implementation.md` — run guide
 
 - **Phase outcome (what you can run in Thonny on the Pi)**
   - A single runnable entrypoint script (e.g., `src/main.py`) that you can open in **Thonny on the Raspberry Pi** and press **Run**.
