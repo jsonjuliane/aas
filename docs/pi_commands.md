@@ -83,9 +83,21 @@ readlink -f /dev/serial0
 ls -l $(readlink -f /dev/serial0)
 ```
 
-If **`/dev/ttyS0`** looks like **`crw------- 1 root root`** (mode **600**), only **root** can open it — **being in `dialout` is not enough** until the node allows the group.
+**Example — broken state (before fix):** only root can open `ttyS0` (mode **600**). Being in **`dialout`** does not help yet.
 
-**Fix (persistent):** add a udev rule so `ttyS0` is `root:dialout` and mode **660**:
+```text
+lrwxrwxrwx 1 root root 5 ... /dev/serial0 -> ttyS0
+/dev/ttyS0
+crw------- 1 root root 4, 64 ... /dev/ttyS0
+```
+
+`python3 -c "import serial; ... Serial('/dev/serial0'...)"` may then fail with:
+
+```text
+PermissionError: [Errno 13] Permission denied: '/dev/serial0'
+```
+
+**Fix (persistent):** on the Pi, install a udev rule so `ttyS0` is **`root:dialout`** and mode **660** (run once):
 
 ```bash
 echo 'SUBSYSTEM=="tty", KERNEL=="ttyS0", GROUP="dialout", MODE="0660"' | sudo tee /etc/udev/rules.d/99-ttyS0-dialout.rules
@@ -94,15 +106,31 @@ sudo udevadm trigger
 sudo reboot
 ```
 
-After reboot, confirm:
+After reboot, confirm (same commands as above):
 
 ```bash
+ls -l /dev/serial0
+readlink -f /dev/serial0
 ls -l /dev/ttyS0
 ```
 
-You want **`crw-rw----`** and group **`dialout`** (not `600` and `root:root` only).
+**Example — fixed state (after rule + reboot):** group **`dialout`**, mode **`crw-rw----`**:
 
-**One-shot test** (confirms it was permissions, not wiring):
+```text
+lrwxrwxrwx 1 root root 5 ... /dev/serial0 -> ttyS0
+/dev/ttyS0
+crw-rw---- 1 root dialout 4, 64 ... /dev/ttyS0
+```
+
+Exact major/minor (`4, 64`) and timestamps may differ; the important part is **`rw-rw----`**, **`root`**, **`dialout`**.
+
+**Non-root AT test** (should open without `PermissionError` once fixed):
+
+```bash
+python3 -c "import serial; s=serial.Serial('/dev/serial0',9600,timeout=1); s.write(b'AT\r\n'); print(s.read(200))"
+```
+
+**One-shot test as root** (confirms wiring vs permissions if non-root still fails):
 
 ```bash
 sudo python3 -c "import serial; s=serial.Serial('/dev/serial0',9600,timeout=1); s.write(b'AT\r\n'); print(s.read(200))"
