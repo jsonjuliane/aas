@@ -266,8 +266,8 @@ def main() -> int:
     ap.add_argument(
         "--print-every",
         type=int,
-        default=10,
-        help="Print non-collision sample summary every N samples (0 disables)",
+        default=0,
+        help="Print non-collision sample summary every N samples (default 0 = off)",
     )
     ap.add_argument(
         "--output",
