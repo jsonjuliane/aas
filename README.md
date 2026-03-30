@@ -2,7 +2,7 @@
 
 SmartShell is a Raspberry Pi Zero W–based smart helmet that detects probable accidents and sends SMS alerts with GPS location, with a short cancellation window to prevent false alarms.
 
-For the phased plan, see `docs/PLAN.md`. **Prototype hardware** (BOM, pins, power): `docs/hardware.md`. **What the code does vs that hardware**: `docs/software_state.md`.
+For the phased plan, see `docs/PLAN.md`. **Prototype hardware** (BOM, pins, power): `docs/hardware.md`. **What the code does vs that hardware**: `docs/software_state.md`. **Pi terminal commands** (venv, I2C, serial checks, run modes): `docs/pi_commands.md`.
 
 ---
 

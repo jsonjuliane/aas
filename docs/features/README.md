@@ -15,6 +15,7 @@ Each document describes one feature: hardware and interface.
 
 See also:
 
+- `docs/pi_commands.md` — copy-paste Pi terminal commands (venv, I2C, serial, run modes)
 - `docs/hardware.md` — prototype BOM and pin table
 - `docs/phase0_module_boundaries.md` — API contracts
 - `docs/phase0_config_format.md` — Config JSON formats
