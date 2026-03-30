@@ -26,8 +26,10 @@ This document describes the Phase 1 codebase and how to run it.
 |------|---------|----------|
 | Normal | `python -m src.main` | Pi with hardware |
 | Dry run | `python -m src.main --dry-run` | Development without hardware |
+| Hardware check | `python -m src.main --hardware-check` | One-shot I2C/GPIO/GSM/GPS/MP3 readiness check |
 | Test alert | `python -m src.main --test-alert` | One full alert cycle immediately (bench) |
 | Silence buzzer | `python -m src.main --silence-buzzer` | Drive GPIO off, exit (stuck buzzer at boot) |
+| MPU isolated test | `python -m src.mpu_collision_test` | Detailed tap/collision debug log for MPU-6050 only |
 
 Legacy `--trigger` is accepted as an alias for `--test-alert`.
 
@@ -42,7 +44,7 @@ See `deploy/smartshell.service.example` and **Start on boot (`systemd`)** in `RE
 ## Config
 
 - **contacts**: Copy `config/contacts.family.json.example` → `config/contacts.family.json`
-- **Serial ports**: Edit `src/config.py` — `GPS_SERIAL_PORT`, `MP3_SERIAL_PORT` (only one can use `/dev/ttyS0` at a time)
+- **Serial / GPIO UART**: Edit `src/config.py` — `SIM800L_UART_DEVICE` stays `/dev/serial0`; `GPS_SERIAL_PORT=None` and `MP3_SERIAL_PORT=None` use pigpio GPIO software UART in current breadboard setup
 
 ---
 

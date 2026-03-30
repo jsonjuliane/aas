@@ -104,12 +104,14 @@ This repo already includes `requirements.txt`. Expect additional system packages
 
 - `python3-venv`, `python3-pip`
 - `portaudio` development headers if you use `pyaudio` (voice cancel)
+- `pigpio` for GPIO software UART (GPS/MP3 on breadboard GPIO pins)
 
 Example (may vary by OS version):
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y python3-venv python3-pip portaudio19-dev
+sudo apt-get install -y python3-venv python3-pip portaudio19-dev pigpio python3-pigpio
+sudo systemctl enable --now pigpiod
 ```
 
 ### Python environment
@@ -196,8 +198,10 @@ From Terminal (with venv activated):
 ```bash
 python -m src.main                   # Normal (with hardware)
 python -m src.main --dry-run         # Simulate without hardware
+python -m src.main --hardware-check  # One-shot hardware probe with detailed causes/log
 python -m src.main --test-alert      # One full alert cycle immediately (bench test)
 python -m src.main --silence-buzzer  # Drive buzzer off, then exit (bring-up)
+python -m src.mpu_collision_test     # Isolated MPU tap/collision test with detailed JSONL log
 ```
 
 `--trigger` still works as a hidden alias for `--test-alert` (same behavior).

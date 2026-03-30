@@ -33,6 +33,22 @@ See `docs/phase0_module_boundaries.md` — `sensor_mpu6050`:
 - **Class**: `SensorMPU6050(dry_run=False)`
 - **Usage**: `sensor.calibrate()` at startup; poll `sensor.is_impact_detected()` in main loop.
 
+## Isolated collision/tap debug test
+
+For focused hardware testing without GSM/GPS flow:
+
+```bash
+python -m src.mpu_collision_test
+```
+
+Useful options:
+
+```bash
+python -m src.mpu_collision_test --impact-g 1.5 --tilt-delta-g 0.8 --duration-sec 120
+```
+
+Detailed per-sample JSONL logs are written to `logs/mpu_collision_*.jsonl`.
+
 ## References
 
 - [MPU-6050 Datasheet](https://invensense.tdk.com/products/motion-tracking/6-axis/mpu-6050/)
