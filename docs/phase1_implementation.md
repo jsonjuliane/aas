@@ -16,6 +16,7 @@ This document describes the Phase 1 codebase and how to run it.
 | Contacts | `src/contacts.py` | Load family contacts, format message |
 | Logging | `src/logging_store.py` | `log_event()` |
 | Main | `src/main.py` | Entry point, main loop |
+| Buzzer GPIO | `src/buzzer_hw.py` | Silence buzzer line at startup; `--silence-buzzer` |
 
 ---
 
@@ -25,7 +26,16 @@ This document describes the Phase 1 codebase and how to run it.
 |------|---------|----------|
 | Normal | `python -m src.main` | Pi with hardware |
 | Dry run | `python -m src.main --dry-run` | Development without hardware |
-| Force trigger | `python -m src.main --trigger` | Test alert flow on first poll |
+| Test alert | `python -m src.main --test-alert` | One full alert cycle immediately (bench) |
+| Silence buzzer | `python -m src.main --silence-buzzer` | Drive GPIO off, exit (stuck buzzer at boot) |
+
+Legacy `--trigger` is accepted as an alias for `--test-alert`.
+
+---
+
+## Boot autostart
+
+See `deploy/smartshell.service.example` and **Start on boot (`systemd`)** in `README.md`.
 
 ---
 

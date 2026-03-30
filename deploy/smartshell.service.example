@@ -1,0 +1,28 @@
+# SmartShell — example systemd unit (copy and edit paths, then enable).
+#
+#   sudo cp deploy/smartshell.service.example /etc/systemd/system/smartshell.service
+#   sudo nano /etc/systemd/system/smartshell.service   # fix User, paths
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now smartshell.service
+#   sudo systemctl status smartshell.service
+#
+# Logs: journalctl -u smartshell.service -f
+
+[Unit]
+Description=SmartShell accident alert (Phase 1)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+SupplementaryGroups=gpio dialout
+WorkingDirectory=/home/pi/AccidentAlertSystem
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/pi/AccidentAlertSystem/.venv/bin/python -m src.main
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -21,8 +21,8 @@ SIM800L_UART_DEVICE = "/dev/serial0"
 SIM800L_BAUD = 9600
 
 # GPS (software serial or hardware UART for testing)
-GPS_TX_GPIO = 20  # Pi TX → GPS RX (when using software serial)
-GPS_RX_GPIO = 21  # Pi RX ← GPS TX (when using software serial)
+GPS_RX_GPIO = 20  # Pin 38 — Pi RX ← GPS TX
+GPS_TX_GPIO = 21  # Pin 40 — Pi TX → GPS RX
 GPS_BAUD = 9600
 GPS_SERIAL_PORT = "/dev/ttyS0"  # Use mini UART if GPS wired there; else None for dry run
 
@@ -32,8 +32,9 @@ MP3_RX_GPIO = 26  # Pi RX ← MP3 TX (via 1kΩ resistor)
 MP3_BAUD = 9600
 MP3_SERIAL_PORT = None  # Set to /dev/ttyS0 etc. if MP3 on serial; None = no audio
 
-# Buzzer
+# Buzzer (GPIO → resistor → transistor; typical NPN = HIGH = on, LOW = silent)
 BUZZER_GPIO = 18
+BUZZER_ACTIVE_HIGH = True  # False if your driver is inverted (swap silence level)
 
 # Optional cancel button (Phase 1 fallback)
 CANCEL_BUTTON_GPIO = 17  # Optional; add if you wire a cancel button

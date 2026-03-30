@@ -6,8 +6,9 @@ allows cancel, sends SMS with GPS if not cancelled.
 
 Usage:
     python -m src.main
-    python -m src.main --dry-run   # No hardware; simulate for development
-    python -m src.main --trigger   # Force trigger on first poll (for testing)
+    python -m src.main --dry-run        # No hardware; simulate for development
+    python -m src.main --test-alert     # Run one full alert cycle immediately (bench test)
+    python -m src.main --silence-buzzer # Drive buzzer GPIO off, then exit (temp / bring-up)
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.config import COUNTDOWN_SECONDS
 from src import (
     audio_mp3,
+    buzzer_hw,
     cancel,
     contacts,
     gps,
@@ -36,7 +38,7 @@ from src import (
 
 def run(
     dry_run: bool = False,
-    force_trigger: bool = False,
+    test_alert_immediately: bool = False,
     poll_interval_sec: float = 0.05,
 ) -> None:
     """
@@ -44,7 +46,7 @@ def run(
 
     Args:
         dry_run: If True, no hardware access; simulate.
-        force_trigger: If True, trigger alert on first poll (for testing).
+        test_alert_immediately: If True, run one full alert cycle on first iteration (bench test).
         poll_interval_sec: Seconds between sensor polls.
     """
     sensor = sensor_mpu6050.SensorMPU6050(dry_run=dry_run)
@@ -54,6 +56,7 @@ def run(
 
     try:
         if not dry_run:
+            buzzer_hw.silence()
             sensor.calibrate()
             cancel.init()
         gps_mod.open()
@@ -65,11 +68,11 @@ def run(
         else:
             print("SmartShell monitoring. Press Ctrl+C to stop.")
 
-        triggered_once = False
+        test_alert_done = False
         while True:
-            if force_trigger and not triggered_once:
-                triggered_once = True
-                print("[DRY] Forced trigger for testing.")
+            if test_alert_immediately and not test_alert_done:
+                test_alert_done = True
+                print("[test-alert] Running one full alert cycle (no sensor wait).")
                 _handle_alert(
                     sensor=sensor,
                     gps_mod=gps_mod,
@@ -162,12 +165,34 @@ def main() -> int:
         help="Simulate without hardware (for development)",
     )
     ap.add_argument(
+        "--test-alert",
+        action="store_true",
+        help="Run one full alert cycle immediately (countdown, cancel window, SMS path)",
+    )
+    ap.add_argument(
         "--trigger",
         action="store_true",
-        help="Force trigger on first poll (for testing)",
+        help=argparse.SUPPRESS,
+    )
+    ap.add_argument(
+        "--silence-buzzer",
+        action="store_true",
+        help="Drive buzzer GPIO to off and exit (bring-up / stuck buzzer)",
     )
     args = ap.parse_args()
-    run(dry_run=args.dry_run, force_trigger=args.trigger)
+    if args.silence_buzzer:
+        if buzzer_hw.silence():
+            print(
+                "Buzzer GPIO driven to silent level (see BUZZER_ACTIVE_HIGH in src/config.py). "
+                "If it still sounds, try BUZZER_ACTIVE_HIGH = False."
+            )
+            return 0
+        print(
+            "Could not drive buzzer GPIO (not a Raspberry Pi, missing RPi.GPIO, or GPIO error)."
+        )
+        return 1
+    test_now = args.test_alert or args.trigger
+    run(dry_run=args.dry_run, test_alert_immediately=test_now)
     return 0
 
 

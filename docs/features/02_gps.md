@@ -2,14 +2,14 @@
 
 ## Overview
 
-The GPS module provides real-time coordinates for inclusion in SMS alerts. Uses software serial on GPIO 20/21 (Pi TX→GPS RX, Pi RX←GPS TX).
+The GPS module provides real-time coordinates for inclusion in SMS alerts. Uses software serial on GPIO 20/21: Pin 38 (GPIO 20) = RX, Pin 40 (GPIO 21) = TX.
 
 ## Hardware
 
 | Item | Value |
 |------|-------|
 | Interface | UART (software serial) |
-| Pi Pins | TX=GPIO 20, RX=GPIO 21, GND=Pin 34 |
+| Pi Pins | Pin 38 = GPIO 20 (Pi RX ← GPS TX); Pin 40 = GPIO 21 (Pi TX → GPS RX); GND = Pin 34 |
 | Baud | 9600 |
 | Protocol | NMEA (e.g. $GPGGA, $GPRMC) |
 

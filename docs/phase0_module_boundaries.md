@@ -68,10 +68,12 @@ This document defines the module boundaries and public interfaces for the SmartS
 
 **Responsibility**: Sound buzzer (e.g. on incoming SMS from rescue center).
 
+**Phase 1 implementation**: `src/buzzer_hw.py` — `silence()` drives GPIO to the off state (floating-pin / stuck-on at boot). CLI: `--silence-buzzer`.
+
 | Function / Method | Signature | Returns | Notes |
 |------------------|-----------|---------|-------|
-| `beep(duration_sec: float)` | `(float) -> None` | — | Blocking beep |
-| `beep_pattern(times: int, on_sec: float, off_sec: float)` | `(int, float, float) -> None` | — | Alert pattern |
+| `beep(duration_sec: float)` | `(float) -> None` | — | Blocking beep (Phase 4) |
+| `beep_pattern(times: int, on_sec: float, off_sec: float)` | `(int, float, float) -> None` | — | Alert pattern (Phase 4) |
 
 **Dependencies**: `RPi.GPIO` (or equivalent), `src.config`
 
@@ -96,7 +98,7 @@ This document defines the module boundaries and public interfaces for the SmartS
 
 | Function / Method | Signature | Returns | Notes |
 |------------------|-----------|---------|-------|
-| `get_recipients(lat: float \| None, lon: float \| None)` | `(float?, float?) -> list[str]` | Phone numbers | Family + barangay if inside Biñan |
+| `get_recipients(lat: float \| None, lon: float \| None)` | `(float?, float?) -> list[str]` | Phone numbers | Inside Biñan: Family + accident barangay + home barangay; outside: Family + home barangay |
 | `load_config()` | `() -> None` | — | Load contacts + geofence |
 
 **Dependencies**: `shapely`, `src.config`, config JSON files

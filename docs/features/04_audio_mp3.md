@@ -2,7 +2,7 @@
 
 ## Overview
 
-A DFPlayer Mini (or compatible) MP3 module plays pre-recorded countdown audio during the 5-second cancellation window.
+A DFPlayer Mini (or compatible) MP3 module plays pre-recorded countdown audio during the 5-second cancellation window through a **small speaker on the module** — not the Pi’s HDMI or USB audio.
 
 ## Hardware
 

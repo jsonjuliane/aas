@@ -15,7 +15,9 @@ Each document describes one feature: hardware and interface.
 
 See also:
 
+- `docs/hardware.md` — prototype BOM and pin table
 - `docs/phase0_module_boundaries.md` — API contracts
 - `docs/phase0_config_format.md` — Config JSON formats
 - `docs/phase0_os_checklist.md` — Pi OS setup
 - `docs/phase1_implementation.md` — Phase 1 code map and run guide
+- `deploy/smartshell.service.example` — boot autostart (`systemd`)

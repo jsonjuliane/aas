@@ -16,6 +16,7 @@ This document defines the JSON configuration formats used by the SmartShell syst
 | `contacts[].phone` | string | E.164 format (e.g. `+639171234567`) |
 | `contacts[].priority` | int | Order for sending (1 = first) |
 | `message_template` | string | SMS body. Placeholders: `{lat}`, `{lon}`, `{timestamp}` |
+| `subject_home_barangay` | string | Barangay where the rider lives (for routing when outside Biñan or no GPS fix) |
 
 **Example**: See `config/contacts.family.json.example`.
 
@@ -25,7 +26,7 @@ This document defines the JSON configuration formats used by the SmartShell syst
 
 ## contacts.barangay.json
 
-**Purpose**: Barangay rescuer contacts. Used only when rider is **inside** Biñan, Laguna (Phase 2).
+**Purpose**: Barangay rescuer contacts. Maps barangay name → rescuer phone. Used for: accident-location barangay (when inside Biñan) and subject's home barangay (always, when configured).
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -41,7 +42,7 @@ This document defines the JSON configuration formats used by the SmartShell syst
 
 ## geofence.binan.json (Phase 2)
 
-**Purpose**: Polygon boundary for "inside Biñan, Laguna". Used for routing (Family + Barangay vs Family only).
+**Purpose**: Polygon boundary for "inside Biñan, Laguna". Used for routing: inside → Family + accident barangay + home barangay; outside → Family + home barangay.
 
 | Field | Type | Description |
 |-------|------|-------------|

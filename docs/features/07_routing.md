@@ -4,9 +4,11 @@
 
 Alert recipients depend on rider location:
 
-- **Inside Biñan, Laguna** → Family + Barangay rescuer (by location)
-- **Outside Biñan** → Family only
-- **No GPS fix** → Family only (fallback)
+- **Inside Biñan, Laguna** → Family + Barangay where accident happened + Barangay where subject lives
+- **Outside Biñan** → Family + Barangay where subject lives
+- **No GPS fix** → Family + Barangay where subject lives (fallback)
+
+The subject's home barangay is configured in contacts (rider's residence).
 
 ## Config Files
 

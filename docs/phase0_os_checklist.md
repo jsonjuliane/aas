@@ -73,10 +73,12 @@ pip install -r requirements.txt
 
 ## 5. GPIO Access
 
-GPIO (buzzer, optional cancel button) requires either:
+GPIO (buzzer silence at boot, optional cancel button) requires either:
 
 - Running as `root`, or
 - Adding user to `gpio` group: `sudo usermod -aG gpio $USER` (then log out and back in)
+
+For **`systemd`** autostart, put the service user in **`gpio`** and **`dialout`** (see `deploy/smartshell.service.example`).
 
 ---
 

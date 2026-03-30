@@ -20,7 +20,7 @@ Build an IoT-based smart helmet system that:
 2. **Countdown**: Start a **5-second** alert countdown with pre-recorded audio.
 3. **Cancel**: Listen for voice command “cancel” during the 5 seconds; if heard, stop alert and resume monitoring.
 4. **If not cancelled**: Obtain GPS coordinates and send SMS alerts via SIM800L.
-5. **Location routing**: If location is inside Biñan, Laguna → alert **Family + Barangay**; if outside → **Family only**.
+5. **Location routing**: If inside Biñan → **Family + Barangay (accident location) + Barangay (subject's home)**; if outside → **Family + Barangay (subject's home)**.
 6. **Incoming SMS buzzer**: Any incoming text from Barangay rescue center triggers buzzer.
 7. **Logging**: Store event data (timestamp, trigger values, location, routing decision).
 
@@ -75,8 +75,8 @@ Build an IoT-based smart helmet system that:
 | Pin 35 | GPIO 19 | MP3 Player | TX (software serial) |
 | Pin 37 | GPIO 26 | MP3 Player | RX (via 1kΩ resistor) |
 | Pin 34 | GND | GPS Module | GND |
-| Pin 38 | GPIO 20 | GPS Module | TX (software serial) |
-| Pin 40 | GPIO 21 | GPS Module | RX (software serial) |
+| Pin 38 | GPIO 20 | GPS Module | RX (software serial) |
+| Pin 40 | GPIO 21 | GPS Module | TX (software serial) |
 
 **UART usage**: SIM800L uses hardware UART (Pins 8/10). GPS + MP3 use software serial lines on GPIOs as specified.
 
@@ -93,13 +93,14 @@ Build an IoT-based smart helmet system that:
 
 ## Repository readiness check (current state)
 
-Right now the repo is **not yet “set up” as a runnable application**:
-- `requirements.txt` exists
-- `src/` exists but contains only `src/__init__.py`
-- There is no `src/main.py` or runnable entrypoint, no configuration templates, and no deployment instructions yet
-- A local `.venv/` is present in the repo directory (good for local dev, but should be excluded from version control if you later initialize git)
+The repo is a **runnable Phase 1 application** on Raspberry Pi OS when hardware and config match `README.md` / `docs/hardware.md`:
 
-This plan defines what to add in stages to become a working software base.
+- `requirements.txt` and `src/` with `main.py`, `buzzer_hw.py`, and supporting modules (sensor, GPS, GSM, audio, cancel, contacts, logging, `config.py`)
+- Example contacts: `config/contacts.family.json.example` → copy to `config/contacts.family.json`
+- Run: `python -m src.main` (or open `src/main.py` in Thonny); `--dry-run` for no hardware; **`deploy/smartshell.service.example`** for boot autostart
+
+**Documented now:** example **`systemd`** unit → `deploy/smartshell.service.example` and `README.md` (boot autostart).  
+**Still planned (later phases):** barangay routing in code, voice cancel, incoming-SMS buzzer, watchdogs — see phases below.
 
 ---
 
@@ -149,13 +150,8 @@ This plan defines what to add in stages to become a working software base.
   - `src/main.py` runnable in Thonny (Pi)
   - `config/contacts.family.json` (phone numbers + message template variables)
   - `assets/audio/` countdown audio file(s)
-  - Minimal “bring-up” scripts (can also be run in Thonny) to test each peripheral independently:
-    - MPU-6050 read/calibration test
-    - GPS NMEA read/parse test
-    - SIM800L AT + SMS send test
-    - MP3 play test
-    - Buzzer GPIO test
-  - “How to run on Pi with Thonny” section completed (below)
+  - Bench testing without separate scripts: `--test-alert` (full alert path), `--silence-buzzer` (GPIO buzzer off); optional small Thonny snippets per `docs/features/` if needed
+  - “How to run on Pi with Thonny” + **systemd** boot autostart (`deploy/smartshell.service.example`, `README.md`)
 
 - **Not in scope (deferred)**
   - Barangay routing by geofence
@@ -163,7 +159,7 @@ This plan defines what to add in stages to become a working software base.
   - Incoming SMS parsing + buzzer rules beyond “any SMS triggers”
 
 - **Exit criteria (demo)**
-  - Simulated impact (or controlled “trigger mode”) reliably starts countdown
+  - Simulated impact (or `--test-alert` / legacy `--trigger`) reliably starts countdown
   - Cancel within 5 seconds prevents SMS every time
   - No cancel sends SMS with valid coordinates (or “no fix” fallback message) every time
   - Log file records event metadata for each run
@@ -172,7 +168,7 @@ This plan defines what to add in stages to become a working software base.
 
 ### Phase 2 — Location-aware routing (Biñan geofence + barangay contacts)
 
-**Goal**: match your requirement: inside Biñan → Family + Barangay; outside → Family only.
+**Goal**: match your requirement: inside Biñan → Family + Barangay (accident) + Barangay (subject's home); outside → Family + Barangay (subject's home).
 
 - **Phase outcome (still runnable in Thonny)**
   - Same `src/main.py` remains runnable from Thonny on the Pi, now with routing logic enabled.
@@ -236,7 +232,7 @@ Once Phase 1 is implemented, running is intentionally simple:
 
 - **Scope**
   - Incoming SMS monitoring from Barangay rescue center; buzzer signaling rules
-  - Process supervision (auto-start on boot, auto-restart on crash)
+  - Process hardening beyond the baseline **`systemd`** example (watchdogs, resource limits, log rotation)
   - Watchdogs for GPS/GSM health, backoff/retry strategies
   - Power resilience (brownouts, SIM800L current spikes)
   - Data retention policy for logs
@@ -253,18 +249,21 @@ When you start implementation, keep it simple and Pi-friendly:
 
 ```
 AccidentAlertSystem/
+├── deploy/
+│   └── smartshell.service.example
 ├── docs/
 │   └── PLAN.md
 ├── src/
 │   ├── main.py
 │   ├── config.py
+│   ├── buzzer_hw.py
 │   ├── sensor_mpu6050.py
 │   ├── gps.py
 │   ├── gsm_sim800l.py
 │   ├── audio_mp3.py
 │   ├── cancel.py
 │   ├── routing.py
-│   ├── buzzer.py
+│   ├── buzzer.py          # (Phase 4 — SMS-driven patterns)
 │   └── logging_store.py
 ├── config/
 │   ├── contacts.family.json
@@ -287,7 +286,7 @@ AccidentAlertSystem/
 
 ## Acceptance tests (what “working” means)
 
-- **Accident trigger**: controlled test causes countdown reliably, without random triggers at rest.
+- **Accident trigger**: real impacts or `--test-alert` cause countdown reliably, without random triggers at rest.
 - **Cancel**: cancel within 5 seconds reliably stops the alert sequence.
 - **Alert**: no cancel sends SMS with:
   - timestamp

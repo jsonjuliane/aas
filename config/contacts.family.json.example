@@ -13,5 +13,6 @@
       "priority": 2
     }
   ],
-  "message_template": "ALERT: Possible accident. Rider may need help. Location: {lat}, {lon} at {timestamp}. Reply to confirm."
+  "message_template": "ALERT: Possible accident. Rider may need help. Location: {lat}, {lon} at {timestamp}. Reply to confirm.",
+  "subject_home_barangay": "Barangay A"
 }

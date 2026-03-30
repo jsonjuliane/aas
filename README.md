@@ -2,7 +2,7 @@
 
 SmartShell is a Raspberry Pi Zero W–based smart helmet that detects probable accidents and sends SMS alerts with GPS location, with a short cancellation window to prevent false alarms.
 
-For the phased plan, see `docs/PLAN.md`.
+For the phased plan, see `docs/PLAN.md`. **Prototype hardware** (BOM, pins, power): `docs/hardware.md`. **What the code does vs that hardware**: `docs/software_state.md`.
 
 ---
 
@@ -36,10 +36,20 @@ For the phased plan, see `docs/PLAN.md`.
 | 35 | GPIO19 | MP3 player | TX |
 | 37 | GPIO26 | MP3 player | RX (via 1kΩ) |
 | 34 | GND | GPS | GND |
-| 38 | GPIO20 | GPS | TX |
-| 40 | GPIO21 | GPS | RX |
+| 38 | GPIO20 | GPS | RX |
+| 40 | GPIO21 | GPS | TX |
 
 **Important**: Use a **star ground** (common ground) across battery (-), both bucks, Pi ground, and all modules.
+
+### Buzzer squeals as soon as power is applied
+
+On the prototype harness, **GPIO 18 can float** until Linux and your app configure it. With a transistor-driven buzzer, that often reads as **always on**. After SmartShell starts, it **drives the buzzer line to the silent level** first. For a one-shot fix without running the full loop:
+
+```bash
+python -m src.main --silence-buzzer
+```
+
+If the buzzer **still** stays on, your driver may be **inverted**; in `src/config.py` set `BUZZER_ACTIVE_HIGH = False`. If it never turns on when you expect (Phase 4), revert or fix the schematic.
 
 ### Power notes (critical)
 
@@ -77,14 +87,12 @@ You want UART enabled for the SIM800L, and you must **disable the serial login s
 
 Typical device path is `/dev/serial0` (preferred) or `/dev/ttyAMA0` depending on Pi OS and overlays.
 
-### 3) Audio output (for MP3 countdown)
+### 3) Countdown audio (DFPlayer + speaker)
 
-Decide how you will output audio from the Pi:
-- HDMI audio (not typical in helmets)
-- USB sound card
-- I2S DAC / amplifier
+The prototype uses an **MP3 player module** (e.g. DFPlayer Mini) on **UART** (GPIO 19/26 per wiring table), driving a **small speaker** — not the Pi’s HDMI or USB audio.
 
-For helmet builds, a small USB sound card or I2S DAC is often simplest. Confirm you can play a WAV/MP3 from the Pi before integrating the rest.
+- Put track `001` on the module’s SD card (see `src/audio_mp3.py` / DFPlayer conventions).
+- Set `MP3_SERIAL_PORT` in `src/config.py` to the serial device that reaches the module (often conflicts with GPS if both need the same hardware UART; see `docs/software_state.md`).
 
 ---
 
@@ -186,27 +194,50 @@ The app will monitor the sensor. On impact, it runs a 5-second countdown; press 
 From Terminal (with venv activated):
 
 ```bash
-python -m src.main              # Normal (with hardware)
-python -m src.main --dry-run     # Simulate without hardware
-python -m src.main --trigger     # Force alert on first poll (for testing)
+python -m src.main                   # Normal (with hardware)
+python -m src.main --dry-run         # Simulate without hardware
+python -m src.main --test-alert      # One full alert cycle immediately (bench test)
+python -m src.main --silence-buzzer  # Drive buzzer off, then exit (bring-up)
 ```
+
+`--trigger` still works as a hidden alias for `--test-alert` (same behavior).
 
 ---
 
-## Deployment recommendation (Phase 4)
+## Start on boot (`systemd`)
 
-For a helmet device, plan to run the program as a `systemd` service so it:
-- starts on boot
-- restarts on crash
-- logs cleanly
+Thonny and manual `python -m src.main` are for development. On the helmet, use **systemd** so SmartShell **starts when the Pi boots** and **restarts after a crash**.
 
-This is intentionally deferred until Phase 4 in `docs/PLAN.md`, but you can prepare for it early.
+1. Copy the example unit and **edit** `User`, `WorkingDirectory`, and `ExecStart` to match your Pi user and project path (venv Python path must be correct):
+
+   ```bash
+   sudo cp deploy/smartshell.service.example /etc/systemd/system/smartshell.service
+   sudo nano /etc/systemd/system/smartshell.service
+   ```
+
+2. Ensure the service user is in **`gpio`** and **`dialout`** (serial):  
+   `sudo usermod -aG gpio,dialout pi` then log out and back in (see `docs/phase0_os_checklist.md`).
+
+3. Enable and start:
+
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now smartshell.service
+   sudo systemctl status smartshell.service
+   ```
+
+4. Follow logs: `journalctl -u smartshell.service -f`
+
+Full product hardening (watchdogs, incoming-SMS buzzer) stays in later phases; see `docs/PLAN.md`.
 
 ---
 
 ## What’s in this repo today
 
 - `src/main.py`: runnable entrypoint (Phase 1)
+- `deploy/smartshell.service.example`: template `systemd` unit for boot autostart
 - `docs/PLAN.md`: phased plan and wiring
+- `docs/hardware.md`: prototype BOM, pins, power (matches physical build)
+- `docs/software_state.md`: module map, serial/GPS notes, Phase 2+ gaps
 - `docs/features/`: per-feature documentation
 
