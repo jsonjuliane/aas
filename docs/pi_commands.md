@@ -124,6 +124,54 @@ crw-rw---- 1 root dialout 4, 64 ... /dev/ttyS0
 
 Exact major/minor (`4, 64`) and timestamps may differ; the important part is **`rw-rw----`**, **`root`**, **`dialout`**.
 
+### If `/dev/ttyS0` is still `crw------- root root` after reboot
+
+The rule file may not match your kernel/udev, or another rule may run later and reset permissions.
+
+**1. Confirm the rule exists and reload:**
+
+```bash
+cat /etc/udev/rules.d/99-ttyS0-dialout.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=tty
+ls -l /dev/ttyS0
+```
+
+**2. See what udev knows about the device:**
+
+```bash
+udevadm info -q all -n /dev/ttyS0
+```
+
+**3. Try an alternative rule** (replace the file, reload, trigger, check again — reboot if needed):
+
+```bash
+echo 'KERNEL=="ttyS0", GROUP="dialout", MODE="0660"' | sudo tee /etc/udev/rules.d/99-ttyS0-dialout.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=tty
+ls -l /dev/ttyS0
+```
+
+If still `600`, try adding **`ACTION=="add"`** at the start of the line (some systems need it).
+
+**4. Check for conflicting rules:**
+
+```bash
+grep -r ttyS0 /etc/udev/rules.d/ /lib/udev/rules.d/ 2>/dev/null
+```
+
+**5. Last-resort (until udev behaves):** after each boot, fix permissions once (not ideal for production):
+
+```bash
+sudo chmod 660 /dev/ttyS0
+sudo chgrp dialout /dev/ttyS0
+ls -l /dev/ttyS0
+```
+
+You can automate that with a small **`systemd` oneshot** or **`@reboot` cron** if you must — prefer fixing the udev rule long-term.
+
+**Note:** On some Pi images the UART device is **`ttyAMA0`** instead of **`ttyS0`**. If `readlink -f /dev/serial0` shows **`/dev/ttyAMA0`**, duplicate the rule with `KERNEL=="ttyAMA0"` (or adjust the symlink target in `/boot/firmware/config.txt` / UART overlay docs).
+
 **Non-root AT test** (should open without `PermissionError` once fixed):
 
 ```bash
