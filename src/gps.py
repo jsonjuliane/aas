@@ -10,7 +10,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from src.config import GPS_BAUD, GPS_SERIAL_PORT
+from src.config import GPS_BAUD, GPS_RX_GPIO, GPS_SERIAL_PORT
 
 
 def _parse_gpgga(line: str) -> dict | None:
@@ -61,17 +61,40 @@ class GPSModule:
         self._port = port if port is not None else GPS_SERIAL_PORT
         self._dry_run = dry_run
         self._ser: Any = None
+        self._pi: Any = None
+        self._bb_open = False
+        self._bb_buf = ""
 
     def open(self) -> None:
-        """Open serial connection to GPS module. Silently fails if port unavailable."""
-        if self._dry_run or not self._port:
+        """Open GPS input (kernel serial if configured, else pigpio GPIO software UART)."""
+        if self._dry_run:
+            return
+        if self._port:
+            try:
+                import serial
+
+                self._ser = serial.Serial(self._port, GPS_BAUD, timeout=0.5)
+            except (ImportError, OSError):
+                self._ser = None
             return
         try:
-            import serial
-
-            self._ser = serial.Serial(self._port, GPS_BAUD, timeout=0.5)
-        except (ImportError, OSError):
-            self._ser = None
+            import pigpio
+        except ImportError:
+            self._pi = None
+            return
+        self._pi = pigpio.pi()
+        if not getattr(self._pi, "connected", False):
+            self._pi = None
+            return
+        try:
+            try:
+                self._pi.bb_serial_read_close(GPS_RX_GPIO)
+            except Exception:
+                pass
+            self._pi.bb_serial_read_open(GPS_RX_GPIO, GPS_BAUD, 8)
+            self._bb_open = True
+        except Exception:
+            self._bb_open = False
 
     def close(self) -> None:
         """Close serial connection."""
@@ -81,6 +104,19 @@ class GPSModule:
             except Exception:
                 pass
             self._ser = None
+        if self._pi is not None:
+            if self._bb_open:
+                try:
+                    self._pi.bb_serial_read_close(GPS_RX_GPIO)
+                except Exception:
+                    pass
+                self._bb_open = False
+            try:
+                self._pi.stop()
+            except Exception:
+                pass
+            self._pi = None
+            self._bb_buf = ""
 
     def get_fix(self, timeout_sec: float = 5.0) -> dict | None:
         """
@@ -94,15 +130,15 @@ class GPSModule:
         Returns:
             Dict with lat, lon, optionally alt, timestamp. None if no fix.
         """
-        if self._dry_run or not self._port:
+        if self._dry_run:
             return None
-        if self._ser is None:
+        if self._ser is None and self._pi is None:
             self.open()
-        if self._ser is None:
+        if self._ser is None and self._pi is None:
             return None
         deadline = time.monotonic() + timeout_sec
         while time.monotonic() < deadline:
-            line = self._ser.readline().decode("ascii", errors="ignore").strip()
+            line = self.read_nmea_line()
             if line and line.startswith("$"):
                 parsed = _parse_gpgga(line)
                 if parsed and parsed.get("fix", 0) in (1, 2):
@@ -115,7 +151,21 @@ class GPSModule:
 
     def read_nmea_line(self) -> str | None:
         """Read one raw NMEA line. For debugging."""
-        if self._dry_run or self._ser is None:
+        if self._dry_run:
             return None
-        line = self._ser.readline().decode("ascii", errors="ignore").strip()
+        if self._ser is not None:
+            line = self._ser.readline().decode("ascii", errors="ignore").strip()
+            return line if line else None
+        if self._pi is None or not self._bb_open:
+            return None
+        try:
+            count, data = self._pi.bb_serial_read(GPS_RX_GPIO)
+        except Exception:
+            return None
+        if count > 0 and data:
+            self._bb_buf += data.decode("ascii", errors="ignore")
+        if "\n" not in self._bb_buf:
+            return None
+        line, self._bb_buf = self._bb_buf.split("\n", 1)
+        line = line.strip("\r").strip()
         return line if line else None

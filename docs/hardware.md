@@ -57,9 +57,30 @@ Same as `README.md` / `src/config.py`:
 
 ---
 
+## Do we need both GPS and GSM?
+
+**Yes** for the full product: GPS for coordinates in the SMS, GSM to send the SMS. They are already used **one after the other in software** (`main.py`: after countdown, **get GPS fix**, then **send SMS**). That **time order** does not remove a **hardware** rule:
+
+- **SIM800L** is on the Pi’s **hardware UART** (GPIO **14/15** → usually **`/dev/serial0` → `/dev/ttyS0`**).
+- **GPS** on the breadboard is on **GPIO 20/21** — **different pins** than the SIM800L UART. It is **not** the same wire as `ttyS0`, so you must **not** point `GPS_SERIAL_PORT` at `/dev/ttyS0` unless your **physical** GPS is actually on that UART (it usually is not on this harness).
+
+So you **do** use both modules; the limit was **mis-configuring GPS as `ttyS0`**, which is already the GSM UART. **Alternating “open GPS then open GSM” on the same `/dev/ttyS0`** only works if **one** device is electrically on those pins — you cannot attach **both** SIM800L and GPS to the **same** TX/RX pair without extra hardware (mux). Your schematic uses **separate** pins for GPS vs GSM, so the fix is **correct serial backend per pin group** (hardware UART for GSM; GPIO UART / USB GPS for GPS — see code roadmap), not toggling one `/dev` between two wired modules on different GPIOs.
+
+---
+
+## MP3 / DFPlayer and “USB-TTL”
+
+- **DFPlayer Mini** is controlled by a **serial UART** (9600 baud), **not** by Pi HDMI/USB audio. The **speaker** plugs into the **DFPlayer’s** audio output, **not** into the Pi’s 3.5 mm or USB sound.
+
+- A **USB-TTL adapter** (also **USB–serial**, FTDI/CP2102/CH340 dongle) is **not** a microphone. It is a **small USB device**: one end **USB into the Pi**, the other end **TX / RX / GND** wires to **DFPlayer RX / TX / GND** so Linux exposes something like **`/dev/ttyUSB0`**. That matches what `MP3_SERIAL_PORT` expects when you use **`/dev/ttyUSB0`**.
+
+- If you **do not** have a USB-TTL dongle, you can still wire DFPlayer to **GPIO 19/26** on the breadboard, but the **current** Python code expects a **`/dev/tty*`** for `audio_mp3` — GPIO bit-bang on 19/26 would need extra code (e.g. pigpio) or a different wiring strategy. Until then, set **`MP3_SERIAL_PORT = None`** and **`--hardware-check`** will **SKIP** MP3 serial (not a “missing microphone”).
+
+---
+
 ## Software serial note
 
-GPS and MP3 use **GPIO bit-banged UART** in the wiring plan. The current Python code opens **kernel serial devices** (`/dev/serial0`, `/dev/ttyS0`) where applicable. If your image maps a hardware UART to GPS, set `GPS_SERIAL_PORT` in `src/config.py`. For true GPIO UART on 20/21 without a `/dev/tty*`, a lower-level driver (e.g. pigpio) would be needed — document any change on the prototype.
+GPS and MP3 use **GPIO UART** in the wiring plan. The current Python code opens **kernel serial devices** (`/dev/serial0`, `/dev/ttyUSB*`) where applicable. If your image maps a hardware UART to GPS, set `GPS_SERIAL_PORT` in `src/config.py`. For true GPIO UART on 20/21 without a `/dev/tty*`, a lower-level driver (e.g. pigpio) would be needed — document any change on the prototype.
 
 ---
 

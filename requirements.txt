@@ -16,6 +16,7 @@ shapely>=2.0.0
 
 # GPIO (Raspberry Pi only; install fails on non-Pi)
 RPi.GPIO>=0.7.0
+pigpio>=1.78
 
 # Optional: for development/testing without hardware
 # pytest>=7.0.0

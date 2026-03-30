@@ -35,7 +35,7 @@ python -m src.main
 ```
 
 - **`--core-flow-only`**: init + sensor monitoring / threshold / validation; skips countdown and SMS path.
-- **`--hardware-check`**: one-shot I2C / GPIO / GSM AT / GPS / MP3 port probes (no alert logic).
+- **`--hardware-check`**: one-shot I2C / GPIO / GSM AT / GPS / MP3 port probes (no alert logic). **WARN / SKIP / FAIL / INFO** lines include indented **causes**; the same entries are appended to **`logs/hardware_check.log`** on the Pi (folder is gitignored).
 - Startup prints **`GPS serial OK` / `NOT OPEN`** and **`GSM serial OK` / `NOT OPEN`** — see [Serial / GPS vs GSM](#serial--gps-vs-gsm) below.
 
 ---
@@ -64,7 +64,11 @@ ls -l /dev/serial0 /dev/ttyS0 /dev/ttyAMA0 2>/dev/null
 
 Typical: **`/dev/serial0` → `ttyS0`** (hardware UART on GPIO 14/15) — good for **SIM800L** when `src/config.py` has `SIM800L_UART_DEVICE = "/dev/serial0"`.
 
-**Conflict:** **GSM** uses **`/dev/serial0`** (usually **`ttyS0`**). **`GPS_SERIAL_PORT`** must **not** be the same device unless only one module is wired there. Breadboard GPS on **GPIO 20/21** is **not** `ttyS0` in software until you add a **USB GPS** (`/dev/ttyUSB*`) or a suitable overlay — default **`GPS_SERIAL_PORT = None`** avoids fighting GSM. **MP3** in `config.py` defaults to **`/dev/ttyUSB0`** for a **USB-TTL** to the DFPlayer; use **`None`** if you have no adapter (see [Troubleshoot GSM and GPS](#troubleshoot-gsm-and-gps)).
+**Conflict:** **GSM** uses **`/dev/serial0`** (usually **`ttyS0`**). Do **not** point `GPS_SERIAL_PORT` to that same UART.  
+For breadboard wiring, defaults are now:
+- `GPS_SERIAL_PORT = None` → use **pigpio GPIO software UART** on GPS pins (RX GPIO20)
+- `MP3_SERIAL_PORT = None` → use **pigpio GPIO software UART TX** on MP3 TX pin (GPIO19)
+If you prefer USB adapters, set `GPS_SERIAL_PORT` / `MP3_SERIAL_PORT` to `/dev/ttyUSB*`.
 
 Permissions:
 
@@ -198,6 +202,19 @@ python3 -c "import serial; s=serial.Serial('/dev/serial0',9600,timeout=1); s.wri
 
 You want **`OK`** in the response. If `serial0` opens but SmartShell shows **GSM NOT OPEN**, the code requires **`OK`** from `AT` during `open()` — fix power, wiring, or baud.
 
+### pigpio service (required for GPIO software UART)
+
+For GPS/MP3 on GPIO pins (no USB serial adapter), install and start `pigpiod`:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y pigpio python3-pigpio
+sudo systemctl enable --now pigpiod
+systemctl status pigpiod --no-pager
+```
+
+If `--hardware-check` says GPS/MP3 open failed in GPIO mode, check this service first.
+
 ---
 
 ## Troubleshoot GSM and GPS
@@ -221,7 +238,7 @@ python -m src.main --hardware-check
 
 | Symptom | What to check |
 |--------|----------------|
-| **`GPS_SERIAL_PORT` is `None`** (default) | Expected when GPS is on **GPIO 20/21** only — Python here does **not** bit-bang; use a **USB GPS** and set **`GPS_SERIAL_PORT = "/dev/ttyUSB0"`** (or whatever `ls /dev/ttyUSB*` shows), or add future GPIO-UART support. |
+| **`GPS_SERIAL_PORT` is `None`** (default) | This is expected for breadboard mode — code uses **pigpio** software UART on GPS GPIO pins. Ensure `pigpiod` service is running. |
 | Check says port missing | Wrong path — run `ls /dev/ttyUSB*` after plugging USB GPS. |
 | Port opens, no NMEA in 2s | **Antenna**, sky view, **cold start** (wait longer), wrong baud (9600 in `config.py`), or GPS TX not reaching Pi RX. |
 
@@ -229,8 +246,8 @@ python -m src.main --hardware-check
 
 | Symptom | What to check |
 |--------|----------------|
-| **`FAIL` missing `/dev/ttyUSB0`** | No USB-serial adapter — set **`MP3_SERIAL_PORT = None`** in `src/config.py`, or plug adapter and confirm `ls /dev/ttyUSB0`. |
-| DFPlayer only on GPIO 19/26 | This repo expects a **kernel** `/dev/tty*` for `audio_mp3`; USB-TTL is the usual bench setup until GPIO software-UART exists. |
+| `MP3_SERIAL_PORT` is `None` (default) | Breadboard mode — code sends DFPlayer commands via **pigpio** on GPIO19. Ensure `pigpiod` service is running. |
+| Want USB adapter instead | Set `MP3_SERIAL_PORT` to `/dev/ttyUSB*` and verify with `ls /dev/ttyUSB*`. |
 
 ---
 

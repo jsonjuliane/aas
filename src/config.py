@@ -20,21 +20,21 @@ MPU6050_I2C_ADDR = 0x68
 SIM800L_UART_DEVICE = "/dev/serial0"
 SIM800L_BAUD = 9600
 
-# GPS (breadboard: GPIO 20/21 — not the same as /dev/ttyS0 unless you use USB-GPS or an overlay)
+# GPS (breadboard default: GPIO 20/21 via pigpio software UART)
 GPS_RX_GPIO = 20  # Pin 38 — Pi RX ← GPS TX
 GPS_TX_GPIO = 21  # Pin 40 — Pi TX → GPS RX
 GPS_BAUD = 9600
-# None = do not open a kernel UART for GPS (avoids clashing with GSM on /dev/serial0 → ttyS0).
-# Set to e.g. "/dev/ttyUSB0" if the GPS module is on a USB serial adapter.
+# None = use GPIO software UART (GPS_RX/TX_GPIO) in gps.py.
+# Set to e.g. "/dev/ttyUSB0" only if GPS is physically on a kernel serial adapter.
 GPS_SERIAL_PORT: str | None = None
 
-# MP3 / DFPlayer (breadboard: GPIO 19/26 — `audio_mp3` only talks via a kernel serial device)
+# MP3 / DFPlayer (breadboard default: GPIO 19/26 via pigpio software UART)
 MP3_TX_GPIO = 19  # Pi TX → MP3 RX (when using software serial)
 MP3_RX_GPIO = 26  # Pi RX ← MP3 TX (via 1kΩ resistor)
 MP3_BAUD = 9600
-# USB-TTL between Pi USB and DFPlayer RX/TX lets `python -m src.main --hardware-check` open this path.
-# No adapter: set to None (checks skip). Do not set to /dev/ttyS0 if GSM already uses it.
-MP3_SERIAL_PORT: str | None = "/dev/ttyUSB0"
+# None = use GPIO software UART (MP3_TX/RX_GPIO) in audio_mp3.py.
+# Set to /dev/ttyUSB* only if DFPlayer is physically on a USB-TTL adapter.
+MP3_SERIAL_PORT: str | None = None
 
 # Buzzer (GPIO → resistor → transistor; typical NPN = HIGH = on, LOW = silent)
 BUZZER_GPIO = 18
