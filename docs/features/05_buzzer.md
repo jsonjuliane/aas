@@ -7,14 +7,14 @@
 **Phase 1 (now):** the prototype harness uses the same GPIO for a **transistor-driven buzzer**. A **floating GPIO** after power-up often leaves the buzzer **on continuously** until software drives the pin. SmartShell sets the **silent** level at normal startup (`src/buzzer_hw.py`). For a one-shot fix:
 
 ```bash
-python -m src.main --silence-buzzer
+python -m src.buzzer_test --silence-only
 ```
 
 Bench test (buzzer ON, then OFF after a short hold):
 
 ```bash
-python -m src.main --buzzer-test              # default ~1 s on
-python -m src.main --buzzer-test --buzzer-sec 2.5
+python -m src.buzzer_test              # default ~1 s on
+python -m src.buzzer_test --duration-sec 2.5
 ```
 
 If the buzzer still stays on, set `BUZZER_ACTIVE_HIGH = False` in `src/config.py` (inverted driver).
@@ -29,7 +29,7 @@ If the buzzer still stays on, set `BUZZER_ACTIVE_HIGH = False` in `src/config.py
 
 ## Module Interface
 
-**Current:** `src/buzzer_hw.py` — `silence()` drives the line off; `test_beep(duration_sec)` turns ON then OFF (used by `--buzzer-test`).
+**Current:** `src/buzzer_hw.py` — `silence()` drives the line off; `test_beep(duration_sec)` turns ON then OFF (used by `python -m src.buzzer_test`).
 
 **Future** (`docs/phase0_module_boundaries.md` — `buzzer`):
 

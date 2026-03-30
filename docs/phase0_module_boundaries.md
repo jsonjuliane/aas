@@ -68,7 +68,7 @@ This document defines the module boundaries and public interfaces for the SmartS
 
 **Responsibility**: Sound buzzer (e.g. on incoming SMS from rescue center).
 
-**Phase 1 implementation**: `src/buzzer_hw.py` — `silence()` drives GPIO to the off state (floating-pin / stuck-on at boot). CLI: `--silence-buzzer`.
+**Phase 1 implementation**: `src/buzzer_hw.py` — `silence()` drives GPIO to the off state (floating-pin / stuck-on at boot). CLI: `python -m src.buzzer_test --silence-only`.
 
 | Function / Method | Signature | Returns | Notes |
 |------------------|-----------|---------|-------|

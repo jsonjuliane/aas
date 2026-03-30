@@ -46,7 +46,7 @@ For the phased plan, see `docs/PLAN.md`. **Prototype hardware** (BOM, pins, powe
 On the prototype harness, **GPIO 18 can float** until Linux and your app configure it. With a transistor-driven buzzer, that often reads as **always on**. After SmartShell starts, it **drives the buzzer line to the silent level** first. For a one-shot fix without running the full loop:
 
 ```bash
-python -m src.main --silence-buzzer
+python -m src.buzzer_test --silence-only
 ```
 
 If the buzzer **still** stays on, your driver may be **inverted**; in `src/config.py` set `BUZZER_ACTIVE_HIGH = False`. If it never turns on when you expect (Phase 4), revert or fix the schematic.
@@ -198,10 +198,10 @@ From Terminal (with venv activated):
 ```bash
 python -m src.main                   # Normal (with hardware)
 python -m src.main --dry-run         # Simulate without hardware
-python -m src.main --hardware-check  # One-shot hardware probe with detailed causes/log
+python -m src.hardware_check  # One-shot hardware probe with detailed causes/log
 python -m src.main --test-alert      # One full alert cycle immediately (bench test)
-python -m src.main --silence-buzzer  # Drive buzzer off, then exit (bring-up)
-python -m src.main --buzzer-test     # Buzzer ON briefly then OFF (bench)
+python -m src.buzzer_test --silence-only  # Drive buzzer off, then exit (bring-up)
+python -m src.buzzer_test     # Buzzer ON briefly then OFF (bench)
 python -m src.mpu_collision_test     # Isolated MPU tap/collision test (JSONL: collisions + summary by default)
 ```
 

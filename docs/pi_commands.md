@@ -29,14 +29,14 @@ python3 -m src.main --help
 python -m src.main --core-flow-only
 python -m src.main --core-flow-only --test-alert
 python -m src.main --dry-run
-python -m src.main --silence-buzzer
-python -m src.main --buzzer-test
-python -m src.main --hardware-check
+python -m src.buzzer_test --silence-only
+python -m src.buzzer_test
+python -m src.hardware_check
 python -m src.main
 ```
 
 - **`--core-flow-only`**: init + sensor monitoring / threshold / validation; skips countdown and SMS path.
-- **`--hardware-check`**: one-shot I2C / GPIO / GSM AT / GPS / MP3 port probes (no alert logic). **WARN / SKIP / FAIL / INFO** lines include indented **causes**; the same entries are appended to **`logs/hardware_check.log`** on the Pi (folder is gitignored).
+- **`python -m src.hardware_check`**: one-shot I2C / GPIO / GSM AT / GPS / MP3 port probes (no alert logic). **WARN / SKIP / FAIL / INFO** lines include indented **causes**; the same entries are appended to **`logs/hardware_check.log`** on the Pi (folder is gitignored).
 - Startup prints **`GPS serial OK` / `NOT OPEN`** and **`GSM serial OK` / `NOT OPEN`** — see [Serial / GPS vs GSM](#serial--gps-vs-gsm) below.
 
 ---
@@ -214,7 +214,7 @@ sudo systemctl enable --now pigpiod
 systemctl status pigpiod --no-pager
 ```
 
-If `--hardware-check` says GPS/MP3 open failed in GPIO mode, check this service first.
+If `python -m src.hardware_check` says GPS/MP3 open failed in GPIO mode, check this service first.
 
 ---
 
@@ -223,7 +223,7 @@ If `--hardware-check` says GPS/MP3 open failed in GPIO mode, check this service 
 Run a full report:
 
 ```bash
-python -m src.main --hardware-check
+python -m src.hardware_check
 ```
 
 ### GSM (SIM800L on `/dev/serial0`)

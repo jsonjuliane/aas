@@ -150,7 +150,7 @@ The repo is a **runnable Phase 1 application** on Raspberry Pi OS when hardware 
   - `src/main.py` runnable in Thonny (Pi)
   - `config/contacts.family.json` (phone numbers + message template variables)
   - `assets/audio/` countdown audio file(s)
-  - Bench testing without separate scripts: `--test-alert` (full alert path), `--silence-buzzer` (GPIO buzzer off); optional small Thonny snippets per `docs/features/` if needed
+  - Bench testing commands: `--test-alert` (full alert path), `python -m src.buzzer_test --silence-only` (GPIO buzzer off), `python -m src.hardware_check` (isolated connectivity report)
   - “How to run on Pi with Thonny” + **systemd** boot autostart (`deploy/smartshell.service.example`, `README.md`)
 
 - **Not in scope (deferred)**

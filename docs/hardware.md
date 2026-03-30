@@ -53,7 +53,7 @@ Same as `README.md` / `src/config.py`:
 
 **Power:** Star ground; **100 µF** (or as designed) at SIM800L; GPS supply per LDO notes in `README.md`.
 
-**Buzzer at power-on:** Until the Pi drives **GPIO 18**, the pin may **float** and hold an NPN transistor **on**, so the buzzer can sound continuously. SmartShell calls `buzzer_hw.silence()` at startup; you can also run `python -m src.main --silence-buzzer`. If it stays on, try `BUZZER_ACTIVE_HIGH = False` in `src/config.py` (inverted driver).
+**Buzzer at power-on:** Until the Pi drives **GPIO 18**, the pin may **float** and hold an NPN transistor **on**, so the buzzer can sound continuously. SmartShell calls `buzzer_hw.silence()` at startup; you can also run `python -m src.buzzer_test --silence-only`. If it stays on, try `BUZZER_ACTIVE_HIGH = False` in `src/config.py` (inverted driver).
 
 ---
 
@@ -74,7 +74,7 @@ So you **do** use both modules; the limit was **mis-configuring GPS as `ttyS0`**
 
 - A **USB-TTL adapter** (also **USB–serial**, FTDI/CP2102/CH340 dongle) is **not** a microphone. It is a **small USB device**: one end **USB into the Pi**, the other end **TX / RX / GND** wires to **DFPlayer RX / TX / GND** so Linux exposes something like **`/dev/ttyUSB0`**. That matches what `MP3_SERIAL_PORT` expects when you use **`/dev/ttyUSB0`**.
 
-- If you **do not** have a USB-TTL dongle, you can still wire DFPlayer to **GPIO 19/26** on the breadboard, but the **current** Python code expects a **`/dev/tty*`** for `audio_mp3` — GPIO bit-bang on 19/26 would need extra code (e.g. pigpio) or a different wiring strategy. Until then, set **`MP3_SERIAL_PORT = None`** and **`--hardware-check`** will **SKIP** MP3 serial (not a “missing microphone”).
+- If you **do not** have a USB-TTL dongle, you can still wire DFPlayer to **GPIO 19/26** on the breadboard, but the **current** Python code expects a **`/dev/tty*`** for `audio_mp3` — GPIO bit-bang on 19/26 would need extra code (e.g. pigpio) or a different wiring strategy. Until then, set **`MP3_SERIAL_PORT = None`** and **`python -m src.hardware_check`** will **SKIP** MP3 serial (not a “missing microphone”).
 
 ---
 

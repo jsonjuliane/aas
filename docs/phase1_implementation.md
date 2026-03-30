@@ -16,7 +16,7 @@ This document describes the Phase 1 codebase and how to run it.
 | Contacts | `src/contacts.py` | Load family contacts, format message |
 | Logging | `src/logging_store.py` | `log_event()` |
 | Main | `src/main.py` | Entry point, main loop |
-| Buzzer GPIO | `src/buzzer_hw.py` | Silence at startup; `--silence-buzzer`; `--buzzer-test` (ON then OFF) |
+| Buzzer GPIO | `src/buzzer_hw.py` | Silence at startup; `python -m src.buzzer_test --silence-only`; `python -m src.buzzer_test` (ON then OFF) |
 
 ---
 
@@ -26,10 +26,10 @@ This document describes the Phase 1 codebase and how to run it.
 |------|---------|----------|
 | Normal | `python -m src.main` | Pi with hardware |
 | Dry run | `python -m src.main --dry-run` | Development without hardware |
-| Hardware check | `python -m src.main --hardware-check` | One-shot I2C/GPIO/GSM/GPS/MP3 readiness check |
+| Hardware check | `python -m src.hardware_check` | One-shot I2C/GPIO/GSM/GPS/MP3 readiness check |
 | Test alert | `python -m src.main --test-alert` | One full alert cycle immediately (bench) |
-| Silence buzzer | `python -m src.main --silence-buzzer` | Drive GPIO off, exit (stuck buzzer at boot) |
-| Buzzer bench test | `python -m src.main --buzzer-test` | Buzzer ON briefly then OFF (`--buzzer-sec` for duration) |
+| Silence buzzer | `python -m src.buzzer_test --silence-only` | Drive GPIO off, exit (stuck buzzer at boot) |
+| Buzzer bench test | `python -m src.buzzer_test` | Buzzer ON briefly then OFF (`--duration-sec` for duration) |
 | MPU isolated test | `python -m src.mpu_collision_test` | Tap/collision test; JSONL defaults to events + summary (`--log-all-samples` for verbose) |
 
 Legacy `--trigger` is accepted as an alias for `--test-alert`.

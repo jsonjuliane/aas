@@ -8,6 +8,7 @@ Writes human-readable lines to logs/hardware_check.log for WARN/SKIP/FAIL (and s
 
 from __future__ import annotations
 
+import argparse
 import os
 import time
 from datetime import datetime, timezone
@@ -291,3 +292,18 @@ def _check_mp3_serial() -> None:
         print(f"[{'OK':5}] MP3 transport ready ({using} @ {MP3_BAUD})")
     finally:
         mp3_mod.close()
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="SmartShell isolated hardware connectivity check")
+    ap.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print dry-run guidance without touching I2C/GPIO/serial",
+    )
+    args = ap.parse_args()
+    return run_hardware_check(dry_run=args.dry_run)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

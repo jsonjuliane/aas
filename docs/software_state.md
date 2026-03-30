@@ -13,7 +13,7 @@
 | **Contacts** | `contacts.py` | — | Loads `config/contacts.family.json` (family SMS list + template). |
 | **Logging** | `logging_store.py` | — | Appends JSON lines under `logs/`. |
 | **Config** | `config.py` | Pin + path constants | Single place for GPIO, baud, serial device paths. |
-| **Buzzer GPIO** | `buzzer_hw.py` | Buzzer driver (GPIO 18) | At normal startup, drives line to **silent** so a floating pin does not hold the buzzer on. `--silence-buzzer` exits after silent; `--buzzer-test` turns ON then OFF for a bench check. |
+| **Buzzer GPIO** | `buzzer_hw.py` | Buzzer driver (GPIO 18) | At normal startup, drives line to **silent** so a floating pin does not hold the buzzer on. `python -m src.buzzer_test --silence-only` exits after silent; `python -m src.buzzer_test` turns ON then OFF for a bench check. |
 
 **Phase 2 (not in `src` yet):** barangay routing, geofence, `contacts.barangay.json` logic.
 
@@ -29,7 +29,7 @@
 4. **Serial paths:** **`GPS_SERIAL_PORT=None`** and **`MP3_SERIAL_PORT=None`** use pigpio GPIO software UART (GPS on GPIO20/21, MP3 TX on GPIO19). If using USB adapters, set to `/dev/ttyUSB*`. Do not point GPS and GSM at the same `ttyS0`.  
 5. **Cancel:** Wire a momentary switch to **GPIO 17** + GND or change `CANCEL_BUTTON_GPIO`.  
 6. **MP3:** SD card in DFPlayer with track `001`; USB-TTL path must match `MP3_SERIAL_PORT`.  
-7. **Buzzer:** If it screams at power-up until the app runs, use `python -m src.main --silence-buzzer` or flip `BUZZER_ACTIVE_HIGH` in `config.py` — see `README.md` / `docs/hardware.md`.
+7. **Buzzer:** If it screams at power-up until the app runs, use `python -m src.buzzer_test --silence-only` or flip `BUZZER_ACTIVE_HIGH` in `config.py` — see `README.md` / `docs/hardware.md`.
 
 Then run:
 
@@ -56,7 +56,7 @@ Expected: continuous monitoring; real impacts trip the flow; SMS goes out if not
 
 - `--dry-run`: no I2C/UART/GPIO; useful on a laptop.  
 - `--test-alert`: one immediate full alert cycle (bench test). `--trigger` is a hidden alias.  
-- `--silence-buzzer`: drive buzzer GPIO off and exit (bring-up).  
-- `--buzzer-test` / `--buzzer-sec`: buzzer ON for a short time then OFF (bench).  
+- `python -m src.buzzer_test --silence-only`: drive buzzer GPIO off and exit (bring-up).  
+- `python -m src.buzzer_test` / `--duration-sec`: buzzer ON for a short time then OFF (bench).  
 - Normal run: requires Pi + hardware + config as above.  
 - Thonny: open `src/main.py` on the Pi; use venv interpreter if you use a venv. For **boot autostart**, use **`systemd`** (`deploy/smartshell.service.example`).
