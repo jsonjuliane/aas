@@ -6,9 +6,9 @@
 |--------|------|------------------|-------------------------------------|
 | **Main loop** | `main.py` | All | Polls sensor; on impact → countdown → cancel window → GPS + SMS + log. |
 | **Sensor** | `sensor_mpu6050.py` | MPU-6050 @ I2C `0x68` | `calibrate()` at start; `is_impact_detected()` uses accel magnitude + baseline tilt. |
-| **GPS** | `gps.py` | GPS UART | Reads NMEA from `GPS_SERIAL_PORT` (default `/dev/ttyS0`). `get_fix()` parses `$GPGGA`. |
+| **GPS** | `gps.py` | GPS UART | Reads NMEA from `GPS_SERIAL_PORT` (default **`None`** — set e.g. `/dev/ttyUSB0` for USB GPS). `get_fix()` parses `$GPGGA`. |
 | **GSM** | `gsm_sim800l.py` | SIM800L on `/dev/serial0` | `send_sms()` via AT commands. |
-| **Audio** | `audio_mp3.py` | DFPlayer-style on UART | `play_track(1)` sends serial frame; needs `MP3_SERIAL_PORT` set if not using default `None`. |
+| **Audio** | `audio_mp3.py` | DFPlayer-style on UART | `play_track(1)` sends serial frame; default **`MP3_SERIAL_PORT`** is **`/dev/ttyUSB0`** for USB-TTL bench wiring, or **`None`** if unused. |
 | **Cancel** | `cancel.py` | GPIO **17** (optional button) | Active-low with pull-up. **Not** on the main wiring table — add a button or change pin in `config.py`. |
 | **Contacts** | `contacts.py` | — | Loads `config/contacts.family.json` (family SMS list + template). |
 | **Logging** | `logging_store.py` | — | Appends JSON lines under `logs/`. |
@@ -26,9 +26,9 @@
 1. **OS:** I2C on; serial console **off** on primary UART; SIM on `/dev/serial0`.  
 2. **Dependencies:** `pip install -r requirements.txt` on the Pi (`RPi.GPIO`, `smbus2`, `pyserial`, …).  
 3. **Config:** `config/contacts.family.json` exists with valid numbers; optional `subject_home_barangay` for future routing.  
-4. **Serial paths:** Set `GPS_SERIAL_PORT` and `MP3_SERIAL_PORT` in `src/config.py` to match how UARTs are exposed (`ttyS0` vs overlays). Only one peripheral can use a single hardware UART at a time unless you bit-bang GPIO.  
+4. **Serial paths:** **`GPS_SERIAL_PORT`**: `None` unless USB GPS (or other `/dev/tty*`). **`MP3_SERIAL_PORT`**: `/dev/ttyUSB0` if DFPlayer via USB-TTL, else `None`. Do not point GPS and GSM at the same `ttyS0` unless one module uses that UART.  
 5. **Cancel:** Wire a momentary switch to **GPIO 17** + GND or change `CANCEL_BUTTON_GPIO`.  
-6. **MP3:** SD card in DFPlayer with track `001`; set `MP3_SERIAL_PORT` so `audio_mp3` can open the port.  
+6. **MP3:** SD card in DFPlayer with track `001`; USB-TTL path must match `MP3_SERIAL_PORT`.  
 7. **Buzzer:** If it screams at power-up until the app runs, use `python -m src.main --silence-buzzer` or flip `BUZZER_ACTIVE_HIGH` in `config.py` — see `README.md` / `docs/hardware.md`.
 
 Then run:

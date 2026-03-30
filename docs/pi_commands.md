@@ -30,10 +30,12 @@ python -m src.main --core-flow-only
 python -m src.main --core-flow-only --test-alert
 python -m src.main --dry-run
 python -m src.main --silence-buzzer
+python -m src.main --hardware-check
 python -m src.main
 ```
 
 - **`--core-flow-only`**: init + sensor monitoring / threshold / validation; skips countdown and SMS path.
+- **`--hardware-check`**: one-shot I2C / GPIO / GSM AT / GPS / MP3 port probes (no alert logic).
 - Startup prints **`GPS serial OK` / `NOT OPEN`** and **`GSM serial OK` / `NOT OPEN`** — see [Serial / GPS vs GSM](#serial--gps-vs-gsm) below.
 
 ---
@@ -62,7 +64,7 @@ ls -l /dev/serial0 /dev/ttyS0 /dev/ttyAMA0 2>/dev/null
 
 Typical: **`/dev/serial0` → `ttyS0`** (hardware UART on GPIO 14/15) — good for **SIM800L** when `src/config.py` has `SIM800L_UART_DEVICE = "/dev/serial0"`.
 
-**Conflict:** Default **`GPS_SERIAL_PORT`** is also **`/dev/ttyS0`**. Only one device can use that UART at a time. If GSM uses `serial0` → `ttyS0`, GPS cannot use `ttyS0` simultaneously unless you use a **second** UART, **USB GPS**, or change overlays / wiring and set **`GPS_SERIAL_PORT`** in `src/config.py` to the real device.
+**Conflict:** **GSM** uses **`/dev/serial0`** (usually **`ttyS0`**). **`GPS_SERIAL_PORT`** must **not** be the same device unless only one module is wired there. Breadboard GPS on **GPIO 20/21** is **not** `ttyS0` in software until you add a **USB GPS** (`/dev/ttyUSB*`) or a suitable overlay — default **`GPS_SERIAL_PORT = None`** avoids fighting GSM. **MP3** in `config.py` defaults to **`/dev/ttyUSB0`** for a **USB-TTL** to the DFPlayer; use **`None`** if you have no adapter (see [Troubleshoot GSM and GPS](#troubleshoot-gsm-and-gps)).
 
 Permissions:
 
@@ -195,6 +197,40 @@ python3 -c "import serial; s=serial.Serial('/dev/serial0',9600,timeout=1); s.wri
 ```
 
 You want **`OK`** in the response. If `serial0` opens but SmartShell shows **GSM NOT OPEN**, the code requires **`OK`** from `AT` during `open()` — fix power, wiring, or baud.
+
+---
+
+## Troubleshoot GSM and GPS
+
+Run a full report:
+
+```bash
+python -m src.main --hardware-check
+```
+
+### GSM (SIM800L on `/dev/serial0`)
+
+| Symptom | What to check |
+|--------|----------------|
+| `Permission denied` | User in **`dialout`**, **`/dev/ttyS0`** is **`crw-rw---- root dialout`** (udev rule + `udevadm trigger` if needed). |
+| Port opens, only see your own `AT\r\n` echo, no **`OK`** | **TX/RX swap**, **GND** common, **power** to module (buck + cap), not a **Pi TX–RX short** (loopback). |
+| `Input/output error` on write | Supply sag, bad wiring, or UART/console conflict — **disable serial login** in `raspi-config`, reboot. |
+| `OK` sometimes then fails | Typical **brownout** — improve SIM800L supply and wiring. |
+
+### GPS
+
+| Symptom | What to check |
+|--------|----------------|
+| **`GPS_SERIAL_PORT` is `None`** (default) | Expected when GPS is on **GPIO 20/21** only — Python here does **not** bit-bang; use a **USB GPS** and set **`GPS_SERIAL_PORT = "/dev/ttyUSB0"`** (or whatever `ls /dev/ttyUSB*` shows), or add future GPIO-UART support. |
+| Check says port missing | Wrong path — run `ls /dev/ttyUSB*` after plugging USB GPS. |
+| Port opens, no NMEA in 2s | **Antenna**, sky view, **cold start** (wait longer), wrong baud (9600 in `config.py`), or GPS TX not reaching Pi RX. |
+
+### MP3 (`MP3_SERIAL_PORT`)
+
+| Symptom | What to check |
+|--------|----------------|
+| **`FAIL` missing `/dev/ttyUSB0`** | No USB-serial adapter — set **`MP3_SERIAL_PORT = None`** in `src/config.py`, or plug adapter and confirm `ls /dev/ttyUSB0`. |
+| DFPlayer only on GPIO 19/26 | This repo expects a **kernel** `/dev/tty*` for `audio_mp3`; USB-TTL is the usual bench setup until GPIO software-UART exists. |
 
 ---
 

@@ -32,7 +32,7 @@ See `docs/phase0_module_boundaries.md` — `gps`:
 - **File**: `src/gps.py`
 - **Class**: `GPSModule(port=None, dry_run=False)`
 - **Usage**: `gps.open()`; `fix = gps.get_fix(timeout_sec=5.0)`; returns `{lat, lon}` or None.
-- **Config**: `GPS_SERIAL_PORT` in `src/config.py` (e.g. `/dev/ttyS0`).
+- **Config**: `GPS_SERIAL_PORT` in `src/config.py` (e.g. **`None`** on breadboard GPIO-only; **`/dev/ttyUSB0`** for USB GPS).
 
 ## References
 
