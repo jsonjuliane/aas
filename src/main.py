@@ -7,6 +7,7 @@ allows cancel, sends SMS with GPS if not cancelled.
 Usage:
     python -m src.main
     python -m src.main --dry-run        # No hardware; simulate for development
+    python -m src.main --core-flow-only # Init + monitor impact detection only
     python -m src.main --test-alert     # Run one full alert cycle immediately (bench test)
     python -m src.main --silence-buzzer # Drive buzzer GPIO off, then exit (temp / bring-up)
 """
@@ -38,6 +39,7 @@ from src import (
 
 def run(
     dry_run: bool = False,
+    core_flow_only: bool = False,
     test_alert_immediately: bool = False,
     poll_interval_sec: float = 0.05,
 ) -> None:
@@ -46,6 +48,7 @@ def run(
 
     Args:
         dry_run: If True, no hardware access; simulate.
+        core_flow_only: If True, skip countdown/cancel/GPS/SMS side effects.
         test_alert_immediately: If True, run one full alert cycle on first iteration (bench test).
         poll_interval_sec: Seconds between sensor polls.
     """
@@ -62,6 +65,12 @@ def run(
         gps_mod.open()
         gsm_mod.open()
         audio_mod.open()
+        _print_init_status(
+            dry_run=dry_run,
+            core_flow_only=core_flow_only,
+            gps_mod=gps_mod,
+            gsm_mod=gsm_mod,
+        )
 
         if dry_run:
             print("SmartShell running in DRY RUN (no hardware). Use Ctrl+C to stop.")
@@ -73,24 +82,36 @@ def run(
             if test_alert_immediately and not test_alert_done:
                 test_alert_done = True
                 print("[test-alert] Running one full alert cycle (no sensor wait).")
-                _handle_alert(
-                    sensor=sensor,
-                    gps_mod=gps_mod,
-                    gsm_mod=gsm_mod,
-                    audio_mod=audio_mod,
-                    dry_run=dry_run,
-                )
+                if core_flow_only:
+                    print("[core-flow] Impact path reached. Skipping countdown/GPS/SMS by design.")
+                else:
+                    _handle_alert(
+                        sensor=sensor,
+                        gps_mod=gps_mod,
+                        gsm_mod=gsm_mod,
+                        audio_mod=audio_mod,
+                        dry_run=dry_run,
+                    )
                 continue
 
             if sensor.is_impact_detected():
-                print("Impact detected. Starting countdown...")
-                _handle_alert(
-                    sensor=sensor,
-                    gps_mod=gps_mod,
-                    gsm_mod=gsm_mod,
-                    audio_mod=audio_mod,
-                    dry_run=dry_run,
-                )
+                if core_flow_only:
+                    print("Impact detected (core-flow). Validation passed; alert side effects skipped.")
+                    logging_store.log_event(
+                        {
+                            "event": "impact_detected_core_flow",
+                            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+                        }
+                    )
+                else:
+                    print("Impact detected. Starting countdown...")
+                    _handle_alert(
+                        sensor=sensor,
+                        gps_mod=gps_mod,
+                        gsm_mod=gsm_mod,
+                        audio_mod=audio_mod,
+                        dry_run=dry_run,
+                    )
             time.sleep(poll_interval_sec)
     except KeyboardInterrupt:
         print("\nStopped.")
@@ -156,6 +177,24 @@ def _handle_alert(
     )
 
 
+def _print_init_status(
+    dry_run: bool,
+    core_flow_only: bool,
+    gps_mod: gps.GPSModule,
+    gsm_mod: gsm_sim800l.GSMSIM800L,
+) -> None:
+    """Print startup status for the top-priority modules."""
+    if dry_run:
+        print("Startup check (dry-run): sensor/GPS/GSM opens are simulated.")
+        return
+    gps_ok = gps_mod._ser is not None  # debug visibility for bench bring-up
+    gsm_ok = gsm_mod._ser is not None  # debug visibility for bench bring-up
+    print(f"Startup check: GPS serial {'OK' if gps_ok else 'NOT OPEN'}")
+    print(f"Startup check: GSM serial {'OK' if gsm_ok else 'NOT OPEN'}")
+    if core_flow_only:
+        print("Mode: core-flow-only (init + monitoring + threshold/validation only).")
+
+
 def main() -> int:
     """Entry point. Returns 0 on normal exit."""
     ap = argparse.ArgumentParser(description="SmartShell accident alert system")
@@ -163,6 +202,11 @@ def main() -> int:
         "--dry-run",
         action="store_true",
         help="Simulate without hardware (for development)",
+    )
+    ap.add_argument(
+        "--core-flow-only",
+        action="store_true",
+        help="Run only initialization + monitoring/threshold/validation; skip alert actions",
     )
     ap.add_argument(
         "--test-alert",
@@ -192,7 +236,11 @@ def main() -> int:
         )
         return 1
     test_now = args.test_alert or args.trigger
-    run(dry_run=args.dry_run, test_alert_immediately=test_now)
+    run(
+        dry_run=args.dry_run,
+        core_flow_only=args.core_flow_only,
+        test_alert_immediately=test_now,
+    )
     return 0
 
 
