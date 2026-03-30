@@ -10,6 +10,7 @@ Usage:
     python -m src.main --core-flow-only # Init + monitor impact detection only
     python -m src.main --test-alert     # Run one full alert cycle immediately (bench test)
     python -m src.main --silence-buzzer # Drive buzzer GPIO off, then exit (temp / bring-up)
+    python -m src.main --buzzer-test    # Buzzer ON briefly then OFF (bench)
     python -m src.main --hardware-check  # Probe I2C/GPIO/serial; no alert logic
 """
 
@@ -225,6 +226,17 @@ def main() -> int:
         help="Drive buzzer GPIO to off and exit (bring-up / stuck buzzer)",
     )
     ap.add_argument(
+        "--buzzer-test",
+        action="store_true",
+        help="Turn buzzer ON for a short time then OFF (bench test)",
+    )
+    ap.add_argument(
+        "--buzzer-sec",
+        type=float,
+        default=1.0,
+        help="Duration for --buzzer-test (seconds, default 1.0)",
+    )
+    ap.add_argument(
         "--hardware-check",
         action="store_true",
         help="Probe hardware (I2C, buzzer, cancel GPIO, GSM AT, GPS, MP3); no monitoring or alerts",
@@ -239,6 +251,17 @@ def main() -> int:
             return 0
         print(
             "Could not drive buzzer GPIO (not a Raspberry Pi, missing RPi.GPIO, or GPIO error)."
+        )
+        return 1
+    if args.buzzer_test:
+        if buzzer_hw.test_beep(duration_sec=args.buzzer_sec):
+            print(
+                f"Buzzer test: ON for {args.buzzer_sec}s then OFF "
+                "(see BUZZER_ACTIVE_HIGH in src/config.py if inverted)."
+            )
+            return 0
+        print(
+            "Buzzer test failed (not a Raspberry Pi, missing RPi.GPIO, or GPIO error)."
         )
         return 1
     if args.hardware_check:

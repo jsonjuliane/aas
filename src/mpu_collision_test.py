@@ -1,5 +1,7 @@
 """
-Isolated MPU-6050 collision/tap test with detailed debug logging.
+Isolated MPU-6050 collision/tap test.
+
+By default logs collision events + session_end to JSONL; use --log-all-samples for per-sample lines.
 
 Run on Raspberry Pi:
     python -m src.mpu_collision_test
@@ -47,6 +49,7 @@ def run_test(
     output_path: Path,
     warmup_sec: float,
     print_every: int,
+    log_collisions_only: bool,
 ) -> int:
     sensor = SensorMPU6050(dry_run=False)
     interval = 1.0 / max(1.0, sample_hz)
@@ -56,7 +59,8 @@ def run_test(
     print(f"Log file: {output_path}")
     print(
         f"Settings: duration={duration_sec}s sample_hz={sample_hz} impact_g={impact_g} "
-        f"tilt_delta_g={tilt_delta_g} cooldown_ms={cooldown_ms}"
+        f"tilt_delta_g={tilt_delta_g} cooldown_ms={cooldown_ms} "
+        f"log_collisions_only={log_collisions_only}"
     )
 
     try:
@@ -88,20 +92,21 @@ def run_test(
     bx, by, bz = warm_ax / warm_n, warm_ay / warm_n, warm_az / warm_n
     baseline_mag = math.sqrt(bx * bx + by * by + bz * bz)
 
-    _write_jsonl(
-        output_path,
-        {
-            "type": "session_start",
-            "ts_utc": _utc_now(),
-            "duration_sec": duration_sec,
-            "sample_hz": sample_hz,
-            "impact_g": impact_g,
-            "tilt_delta_g": tilt_delta_g,
-            "cooldown_ms": cooldown_ms,
-            "warmup_sec": warmup_sec,
-            "baseline": {"ax": bx, "ay": by, "az": bz, "mag": baseline_mag},
-        },
-    )
+    if not log_collisions_only:
+        _write_jsonl(
+            output_path,
+            {
+                "type": "session_start",
+                "ts_utc": _utc_now(),
+                "duration_sec": duration_sec,
+                "sample_hz": sample_hz,
+                "impact_g": impact_g,
+                "tilt_delta_g": tilt_delta_g,
+                "cooldown_ms": cooldown_ms,
+                "warmup_sec": warmup_sec,
+                "baseline": {"ax": bx, "ay": by, "az": bz, "mag": baseline_mag},
+            },
+        )
 
     start = time.monotonic()
     sample_idx = 0
@@ -117,15 +122,16 @@ def run_test(
             try:
                 raw = sensor.read_raw()
             except MPU6050Error as e:
-                _write_jsonl(
-                    output_path,
-                    {
-                        "type": "read_error",
-                        "ts_utc": _utc_now(),
-                        "sample_idx": sample_idx,
-                        "error": str(e),
-                    },
-                )
+                if not log_collisions_only:
+                    _write_jsonl(
+                        output_path,
+                        {
+                            "type": "read_error",
+                            "ts_utc": _utc_now(),
+                            "sample_idx": sample_idx,
+                            "error": str(e),
+                        },
+                    )
                 print(f"[WARN] read_error sample={sample_idx}: {e}")
                 time.sleep(interval)
                 continue
@@ -150,29 +156,30 @@ def run_test(
                 collisions += 1
                 last_collision_at = now
 
-            _write_jsonl(
-                output_path,
-                {
-                    "type": "sample",
-                    "ts_utc": _utc_now(),
-                    "t_rel_sec": round(now - start, 6),
-                    "sample_idx": sample_idx,
-                    "accel_g": {"ax": ax, "ay": ay, "az": az},
-                    "gyro_dps": {"gx": gx, "gy": gy, "gz": gz},
-                    "metrics": {
-                        "accel_mag_g": mag,
-                        "delta_from_baseline_g": delta,
-                        "impact_threshold_g": impact_g,
-                        "tilt_delta_threshold_g": tilt_delta_g,
+            if not log_collisions_only:
+                _write_jsonl(
+                    output_path,
+                    {
+                        "type": "sample",
+                        "ts_utc": _utc_now(),
+                        "t_rel_sec": round(now - start, 6),
+                        "sample_idx": sample_idx,
+                        "accel_g": {"ax": ax, "ay": ay, "az": az},
+                        "gyro_dps": {"gx": gx, "gy": gy, "gz": gz},
+                        "metrics": {
+                            "accel_mag_g": mag,
+                            "delta_from_baseline_g": delta,
+                            "impact_threshold_g": impact_g,
+                            "tilt_delta_threshold_g": tilt_delta_g,
+                        },
+                        "flags": {
+                            "impact_hit": impact_hit,
+                            "tilt_hit": tilt_hit,
+                            "in_cooldown": in_cooldown,
+                            "collision_event": collision,
+                        },
                     },
-                    "flags": {
-                        "impact_hit": impact_hit,
-                        "tilt_hit": tilt_hit,
-                        "in_cooldown": in_cooldown,
-                        "collision_event": collision,
-                    },
-                },
-            )
+                )
 
             if collision:
                 reason = "impact" if impact_hit else "tilt"
@@ -268,6 +275,11 @@ def main() -> int:
         default=None,
         help="Output JSONL path (default logs/mpu_collision_*.jsonl)",
     )
+    ap.add_argument(
+        "--log-all-samples",
+        action="store_true",
+        help="Log every sample + session_start (default: log only collision_event + session_end)",
+    )
     args = ap.parse_args()
 
     out = Path(args.output) if args.output else _default_log_path()
@@ -284,6 +296,7 @@ def main() -> int:
         output_path=out,
         warmup_sec=args.warmup_sec,
         print_every=args.print_every,
+        log_collisions_only=not args.log_all_samples,
     )
 
 

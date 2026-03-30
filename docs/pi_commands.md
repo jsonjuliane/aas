@@ -30,6 +30,7 @@ python -m src.main --core-flow-only
 python -m src.main --core-flow-only --test-alert
 python -m src.main --dry-run
 python -m src.main --silence-buzzer
+python -m src.main --buzzer-test
 python -m src.main --hardware-check
 python -m src.main
 ```

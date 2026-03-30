@@ -201,7 +201,8 @@ python -m src.main --dry-run         # Simulate without hardware
 python -m src.main --hardware-check  # One-shot hardware probe with detailed causes/log
 python -m src.main --test-alert      # One full alert cycle immediately (bench test)
 python -m src.main --silence-buzzer  # Drive buzzer off, then exit (bring-up)
-python -m src.mpu_collision_test     # Isolated MPU tap/collision test with detailed JSONL log
+python -m src.main --buzzer-test     # Buzzer ON briefly then OFF (bench)
+python -m src.mpu_collision_test     # Isolated MPU tap/collision test (JSONL: collisions + summary by default)
 ```
 
 `--trigger` still works as a hidden alias for `--test-alert` (same behavior).

@@ -47,7 +47,7 @@ Useful options:
 python -m src.mpu_collision_test --impact-g 1.5 --tilt-delta-g 0.8 --duration-sec 120
 ```
 
-Detailed per-sample JSONL logs are written to `logs/mpu_collision_*.jsonl`.
+By default, JSONL at `logs/mpu_collision_*.jsonl` records **collision events** and a final **session_end** summary only. Use `--log-all-samples` to also write every sample plus `session_start` (verbose).
 
 ## References
 

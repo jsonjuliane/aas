@@ -13,7 +13,7 @@
 | **Contacts** | `contacts.py` | — | Loads `config/contacts.family.json` (family SMS list + template). |
 | **Logging** | `logging_store.py` | — | Appends JSON lines under `logs/`. |
 | **Config** | `config.py` | Pin + path constants | Single place for GPIO, baud, serial device paths. |
-| **Buzzer GPIO** | `buzzer_hw.py` | Buzzer driver (GPIO 18) | At normal startup, drives line to **silent** so a floating pin does not hold the buzzer on. `--silence-buzzer` does the same and exits. |
+| **Buzzer GPIO** | `buzzer_hw.py` | Buzzer driver (GPIO 18) | At normal startup, drives line to **silent** so a floating pin does not hold the buzzer on. `--silence-buzzer` exits after silent; `--buzzer-test` turns ON then OFF for a bench check. |
 
 **Phase 2 (not in `src` yet):** barangay routing, geofence, `contacts.barangay.json` logic.
 
@@ -57,5 +57,6 @@ Expected: continuous monitoring; real impacts trip the flow; SMS goes out if not
 - `--dry-run`: no I2C/UART/GPIO; useful on a laptop.  
 - `--test-alert`: one immediate full alert cycle (bench test). `--trigger` is a hidden alias.  
 - `--silence-buzzer`: drive buzzer GPIO off and exit (bring-up).  
+- `--buzzer-test` / `--buzzer-sec`: buzzer ON for a short time then OFF (bench).  
 - Normal run: requires Pi + hardware + config as above.  
 - Thonny: open `src/main.py` on the Pi; use venv interpreter if you use a venv. For **boot autostart**, use **`systemd`** (`deploy/smartshell.service.example`).
