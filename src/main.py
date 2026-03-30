@@ -10,6 +10,7 @@ Usage:
     python -m src.main --core-flow-only # Init + monitor impact detection only
     python -m src.main --test-alert     # Run one full alert cycle immediately (bench test)
     python -m src.main --silence-buzzer # Drive buzzer GPIO off, then exit (temp / bring-up)
+    python -m src.main --hardware-check  # Probe I2C/GPIO/serial; no alert logic
 """
 
 from __future__ import annotations
@@ -223,6 +224,11 @@ def main() -> int:
         action="store_true",
         help="Drive buzzer GPIO to off and exit (bring-up / stuck buzzer)",
     )
+    ap.add_argument(
+        "--hardware-check",
+        action="store_true",
+        help="Probe hardware (I2C, buzzer, cancel GPIO, GSM AT, GPS, MP3); no monitoring or alerts",
+    )
     args = ap.parse_args()
     if args.silence_buzzer:
         if buzzer_hw.silence():
@@ -235,6 +241,10 @@ def main() -> int:
             "Could not drive buzzer GPIO (not a Raspberry Pi, missing RPi.GPIO, or GPIO error)."
         )
         return 1
+    if args.hardware_check:
+        from src import hardware_check
+
+        return hardware_check.run_hardware_check(dry_run=args.dry_run)
     test_now = args.test_alert or args.trigger
     run(
         dry_run=args.dry_run,
