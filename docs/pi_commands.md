@@ -73,6 +73,41 @@ sudo usermod -aG gpio,dialout $USER
 
 Log out and back in (or reboot) after `usermod`.
 
+### If you still get `Permission denied` on `/dev/serial0`
+
+`/dev/serial0` is usually a symlink to `/dev/ttyS0`. Check the **real** device:
+
+```bash
+ls -l /dev/serial0
+readlink -f /dev/serial0
+ls -l $(readlink -f /dev/serial0)
+```
+
+If **`/dev/ttyS0`** looks like **`crw------- 1 root root`** (mode **600**), only **root** can open it — **being in `dialout` is not enough** until the node allows the group.
+
+**Fix (persistent):** add a udev rule so `ttyS0` is `root:dialout` and mode **660**:
+
+```bash
+echo 'SUBSYSTEM=="tty", KERNEL=="ttyS0", GROUP="dialout", MODE="0660"' | sudo tee /etc/udev/rules.d/99-ttyS0-dialout.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+sudo reboot
+```
+
+After reboot, confirm:
+
+```bash
+ls -l /dev/ttyS0
+```
+
+You want **`crw-rw----`** and group **`dialout`** (not `600` and `root:root` only).
+
+**One-shot test** (confirms it was permissions, not wiring):
+
+```bash
+sudo python3 -c "import serial; s=serial.Serial('/dev/serial0',9600,timeout=1); s.write(b'AT\r\n'); print(s.read(200))"
+```
+
 ---
 
 ## Quick GSM (AT) sanity check
