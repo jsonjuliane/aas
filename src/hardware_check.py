@@ -246,34 +246,123 @@ def _check_gsm_at() -> None:
 
 
 def _check_gps_serial() -> None:
-    gps_mod = gps.GPSModule(dry_run=False)
-    gps_mod.open()
-    try:
-        using_port = GPS_SERIAL_PORT if GPS_SERIAL_PORT else f"GPIO soft UART RX{GPS_RX_GPIO}"
-        if gps_mod._ser is None and gps_mod._pi is None:
-            _emit(
-                "FAIL",
-                f"GPS open failed ({using_port})",
-                "If using GPIO mode, install pigpio and start pigpiod. "
-                "If using /dev/tty*, check device path and permissions.",
-            )
+    using_port = GPS_SERIAL_PORT if GPS_SERIAL_PORT else f"GPIO soft UART RX{GPS_RX_GPIO}"
+
+    # Try a few common GPS UART baud rates. Start with configured GPS_BAUD.
+    baud_candidates: list[int] = []
+    for b in (GPS_BAUD, 9600, 38400, 115200):
+        if int(b) not in baud_candidates:
+            baud_candidates.append(int(b))
+
+    if GPS_SERIAL_PORT:
+        # Kernel serial mode: probe by opening the port at different bauds.
+        try:
+            import serial
+        except ImportError:
+            _emit("FAIL", "pyserial missing; cannot probe GPS kernel serial", "pip install pyserial in your venv.")
             return
-        deadline = time.monotonic() + 2.0
-        while time.monotonic() < deadline:
-            line = gps_mod.read_nmea_line()
-            if line and line.startswith("$"):
-                sample = line[:60]
-                print(f"[{'OK':5}] GPS NMEA-like data on {using_port}: {sample!r}…")
-                return
-            time.sleep(0.05)
+
+        for baud in baud_candidates:
+            ser = None
+            try:
+                ser = serial.Serial(GPS_SERIAL_PORT, baud, timeout=0.3)
+                deadline = time.monotonic() + 1.5
+                buf = ""
+                while time.monotonic() < deadline:
+                    chunk = ser.read(256)
+                    if chunk:
+                        buf += chunk.decode("ascii", errors="ignore")
+                        if "$" in buf:
+                            # Extract first $... line fragment for display.
+                            idx = buf.find("$")
+                            sample = buf[idx : idx + 60].replace("\r", "").replace("\n", " ")
+                            print(
+                                f"[{'OK':5}] GPS data on {using_port} @ {baud}: {sample!r}…"
+                            )
+                            return
+                    time.sleep(0.05)
+            except (OSError, ValueError):
+                continue
+            finally:
+                if ser is not None:
+                    try:
+                        ser.close()
+                    except Exception:
+                        pass
+
         _emit(
             "WARN",
-            f"GPS opened ({using_port}) but no NMEA starting with $ within 2s",
-            "Antenna outdoors, cold start (wait longer), wrong baud in config, "
+            f"GPS opened ({using_port}) but no data starting with $ across bauds {baud_candidates}",
+            "Antenna outdoors, cold start (wait longer), wrong baud/protocol (NMEA disabled), "
+            "or GPS TX not connected to Pi RX.",
+        )
+        return
+
+    # GPIO soft UART mode (pigpio): probe by opening bb serial read at different bauds.
+    try:
+        import pigpio
+    except ImportError:
+        _emit(
+            "FAIL",
+            f"GPS open failed ({using_port})",
+            "pigpio not installed. Install pigpio + start pigpiod for GPIO UART mode.",
+        )
+        return
+
+    pi = pigpio.pi()
+    if not getattr(pi, "connected", False):
+        _emit(
+            "FAIL",
+            f"GPS open failed ({using_port})",
+            "pigpiod not reachable. Start with: sudo systemctl enable --now pigpiod",
+        )
+        return
+
+    try:
+        for baud in baud_candidates:
+            # Close any previous bb session on this pin before opening at a new baud.
+            try:
+                pi.bb_serial_read_close(GPS_RX_GPIO)
+            except Exception:
+                pass
+            try:
+                pi.bb_serial_read_open(GPS_RX_GPIO, baud, 8)
+            except Exception:
+                continue
+
+            deadline = time.monotonic() + 1.5
+            buf = ""
+            while time.monotonic() < deadline:
+                try:
+                    count, data = pi.bb_serial_read(GPS_RX_GPIO)
+                except Exception:
+                    break
+                if count > 0 and data:
+                    buf += data.decode("ascii", errors="ignore")
+                    if "$" in buf:
+                        idx = buf.find("$")
+                        sample = buf[idx : idx + 60].replace("\r", "").replace("\n", " ")
+                        print(
+                            f"[{'OK':5}] GPS data on {using_port} @ {baud}: {sample!r}…"
+                        )
+                        return
+                time.sleep(0.05)
+
+        _emit(
+            "WARN",
+            f"GPS opened ({using_port}) but no data starting with $ across bauds {baud_candidates}",
+            "Antenna outdoors, cold start (wait longer), wrong baud/protocol (NMEA disabled), "
             "or GPS TX not connected to Pi RX.",
         )
     finally:
-        gps_mod.close()
+        try:
+            pi.bb_serial_read_close(GPS_RX_GPIO)
+        except Exception:
+            pass
+        try:
+            pi.stop()
+        except Exception:
+            pass
 
 
 def _check_mp3_serial() -> None:
