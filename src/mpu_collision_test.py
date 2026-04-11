@@ -16,7 +16,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.config import LOGS_DIR
+from src.config import LOGS_DIR, PROJECT_ROOT
 from src.sensor_mpu6050 import MPU6050Error, SensorMPU6050
 
 
@@ -24,13 +24,9 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f UTC")
 
 
-def _project_root() -> Path:
-    return Path(__file__).resolve().parent.parent
-
-
 def _default_log_path() -> Path:
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    log_dir = _project_root() / LOGS_DIR
+    log_dir = PROJECT_ROOT / LOGS_DIR
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir / f"mpu_collision_{ts}.jsonl"
 
@@ -284,7 +280,7 @@ def main() -> int:
 
     out = Path(args.output) if args.output else _default_log_path()
     if not out.is_absolute():
-        out = _project_root() / out
+        out = PROJECT_ROOT / out
     out.parent.mkdir(parents=True, exist_ok=True)
 
     return run_test(

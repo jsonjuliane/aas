@@ -8,6 +8,11 @@ from here to ensure consistency.
 
 from __future__ import annotations
 
+from pathlib import Path
+
+# Repository root (parent of src/). Use for resolving config/logs paths.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 # -----------------------------------------------------------------------------
 # Raspberry Pi Zero W — Physical pin mapping (BCM numbering for GPIO)
 # -----------------------------------------------------------------------------

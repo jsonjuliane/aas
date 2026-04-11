@@ -58,5 +58,8 @@ Expected: continuous monitoring; real impacts trip the flow; SMS goes out if not
 - `--test-alert`: one immediate full alert cycle (bench test). `--trigger` is a hidden alias.  
 - `python -m src.buzzer_test --silence-only`: drive buzzer GPIO off and exit (bring-up).  
 - `python -m src.buzzer_test` / `--duration-sec`: buzzer ON for a short time then OFF (bench).  
+- `python -m src.hardware_check`: full probe; **exit 1** if any `[FAIL]` line.  
+- `python -m src.gsm_test`: GSM diagnostics (baud sweep, SIM, signal); optional `--send-sms PHONE "msg"`.  
+- `python -m src.gps_test`: GPS NMEA stream test (`--duration-sec`).  
 - Normal run: requires Pi + hardware + config as above.  
 - Thonny: open `src/main.py` on the Pi; use venv interpreter if you use a venv. For **boot autostart**, use **`systemd`** (`deploy/smartshell.service.example`).

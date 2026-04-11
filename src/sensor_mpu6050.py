@@ -152,7 +152,8 @@ class SensorMPU6050:
             )
             if tilt_change > 1.5:  # Significant orientation change
                 return True
-        return mag >= ACCEL_THRESHOLD_G
+        # mag already in [ACCEL_THRESHOLD_G, ACCEL_THRESHOLD_G_MAX] here
+        return True
 
     def close(self) -> None:
         """Release I2C bus."""

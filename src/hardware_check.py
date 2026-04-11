@@ -14,7 +14,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src import audio_mp3, buzzer_hw, cancel, gps
+from src import audio_mp3, buzzer_hw, cancel
 from src.config import (
     CANCEL_BUTTON_GPIO,
     GPS_BAUD,
@@ -26,6 +26,7 @@ from src.config import (
     MP3_BAUD,
     MP3_SERIAL_PORT,
     MP3_TX_GPIO,
+    PROJECT_ROOT,
     SIM800L_BAUD,
     SIM800L_UART_DEVICE,
 )
@@ -36,13 +37,12 @@ _MPU_EXPECT_ID = 0x68
 
 _LOG_NAME = "hardware_check.log"
 
-
-def _project_root() -> Path:
-    return Path(__file__).resolve().parent.parent
+# Incremented on each [FAIL] line (for exit code).
+_hardware_check_failures = 0
 
 
 def _log_file_path() -> Path:
-    root = _project_root()
+    root = PROJECT_ROOT
     log_dir = root / LOGS_DIR
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir / _LOG_NAME
@@ -70,18 +70,26 @@ def _emit(
     log: bool = True,
 ) -> None:
     """Print to stdout; optional detail lines; log WARN/SKIP/FAIL/INFO for debugging."""
+    global _hardware_check_failures
     print(f"[{tag:5}] {summary}")
     if detail:
         for line in detail.strip().split("\n"):
             print(f"       → {line}")
+    if tag == "FAIL":
+        _hardware_check_failures += 1
     if log and tag in ("WARN", "SKIP", "FAIL", "INFO"):
         _append_log(tag, summary, detail)
 
 
 def run_hardware_check(dry_run: bool = False) -> int:
     """
-    Print a structured report. Returns 0 always (informational).
+    Print a structured report.
+
+    Returns:
+        0 if no FAIL lines; 1 if any check reported FAIL (I2C, pyserial, probes, etc.).
     """
+    global _hardware_check_failures
+    _hardware_check_failures = 0
     print("SmartShell — hardware check (connections only, no alert logic)\n")
 
     if dry_run:
@@ -108,7 +116,7 @@ def run_hardware_check(dry_run: bool = False) -> int:
         )
         print()
         print(f"       Log: {path}")
-        return 0
+        return 1 if _hardware_check_failures else 0
 
     # --- MPU-6050 WHO_AM_I ---
     try:
@@ -186,7 +194,16 @@ def run_hardware_check(dry_run: bool = False) -> int:
             f.write(f"{ts_end} [----] === hardware-check session end ===\n")
     except OSError:
         pass
-    return 0
+    return 1 if _hardware_check_failures else 0
+
+
+def _gsm_baud_candidates() -> list[int]:
+    out: list[int] = []
+    for b in (SIM800L_BAUD, 9600, 38400, 115200):
+        bi = int(b)
+        if bi not in out:
+            out.append(bi)
+    return out
 
 
 def _check_gsm_at() -> None:
@@ -194,7 +211,7 @@ def _check_gsm_at() -> None:
     try:
         import serial
 
-        from src.gsm_sim800l import _send_at
+        from src.gsm_sim800l import send_at
     except ImportError:
         _emit("FAIL", "pyserial missing; cannot probe GSM", "pip install pyserial in your venv.")
         return
@@ -208,29 +225,48 @@ def _check_gsm_at() -> None:
         return
 
     ser = None
-    try:
-        ser = serial.Serial(dev, SIM800L_BAUD, timeout=0.5)
-    except OSError as e:
+    working_baud: int | None = None
+    last_snippet = ""
+
+    for baud in _gsm_baud_candidates():
+        try:
+            if ser is not None:
+                try:
+                    ser.close()
+                except Exception:
+                    pass
+                ser = None
+            ser = serial.Serial(dev, baud, timeout=0.5)
+            resp = send_at(ser, "AT", timeout=2.0)
+            last_snippet = repr(resp[:160]) if len(resp) > 160 else repr(resp)
+            if "OK" in resp:
+                working_baud = baud
+                break
+        except OSError:
+            continue
+
+    if ser is None or working_baud is None:
         _emit(
-            "FAIL",
-            f"GSM serial open failed ({dev}): {e}",
-            "Permission: user in dialout, /dev/ttyS0 group dialout mode 660. Or port busy.",
+            "WARN",
+            f"GSM no OK to AT across bauds {_gsm_baud_candidates()}. Last raw: {last_snippet}",
+            "TX/RX crossed to Pi pins 8/10; power 2A+ peaks; 470–1000µF at module VCC; common GND; VDD 3.3V if required.",
         )
+        if ser is not None:
+            try:
+                ser.close()
+            except Exception:
+                pass
         return
 
     try:
-        resp = _send_at(ser, "AT", timeout=2.0)
-        snippet = repr(resp[:160]) if len(resp) > 160 else repr(resp)
-        if "OK" in resp:
-            print(f"[{'OK':5}] GSM AT OK ({dev} @ {SIM800L_BAUD})")
-        else:
-            _emit(
-                "WARN",
-                f"GSM port open but no OK in AT response. Raw: {snippet}",
-                "Common: TX/RX swap or floating; Pi TX/RX shorted (echo only). "
-                "Power/GND to SIM800L, 100 µF at VCC, common ground. "
-                "If only your bytes echo back, module is not replying AT.",
-            )
+        print(f"[{'OK':5}] GSM AT OK ({dev} @ {working_baud})")
+        send_at(ser, "ATE0", timeout=1.0)
+        pin_r = send_at(ser, "AT+CPIN?", timeout=2.0)
+        pin_line = pin_r.replace("\r", " ").strip().split("\n")[-1][:100]
+        print(f"[{'OK':5}] GSM SIM: {pin_line}")
+        csq_r = send_at(ser, "AT+CSQ", timeout=2.0)
+        csq_line = csq_r.replace("\r", " ").strip().split("\n")[-1][:100]
+        print(f"[{'OK':5}] GSM signal: {csq_line}")
     except OSError as e:
         _emit(
             "FAIL",

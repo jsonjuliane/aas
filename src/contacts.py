@@ -8,14 +8,7 @@ Phase 1: family only. Phase 2: add barangay routing.
 from __future__ import annotations
 
 import json
-from pathlib import Path
-
-from src.config import CONFIG_DIR, CONTACTS_FAMILY_FILE
-
-
-def _project_root() -> Path:
-    """Project root (parent of src/)."""
-    return Path(__file__).resolve().parent.parent
+from src.config import CONFIG_DIR, CONTACTS_FAMILY_FILE, PROJECT_ROOT
 
 
 def load_family_contacts() -> tuple[list[str], str]:
@@ -30,7 +23,7 @@ def load_family_contacts() -> tuple[list[str], str]:
         FileNotFoundError: If contacts file not found.
         ValueError: If config invalid.
     """
-    path = _project_root() / CONFIG_DIR / CONTACTS_FAMILY_FILE
+    path = PROJECT_ROOT / CONFIG_DIR / CONTACTS_FAMILY_FILE
     if not path.exists():
         raise FileNotFoundError(
             f"Contacts file not found: {path}. "

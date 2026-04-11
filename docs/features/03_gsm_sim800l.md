@@ -19,8 +19,12 @@ The SIM800L module sends SMS alerts to emergency contacts. Uses hardware UART (p
 | Command | Purpose |
 |---------|---------|
 | AT | Basic check |
+| ATE0 | Disable command echo (after link up) |
+| AT+CMGF=1 | Text mode SMS (before `AT+CMGS`) |
 | AT+CSQ | Signal quality |
 | AT+CPIN? | SIM status |
+| AT+CREG? | Network registration |
+| AT+COPS? | Operator (informational) |
 | AT+CMGS="\<num\>" | Send SMS |
 
 ## Module Interface
@@ -41,8 +45,18 @@ SIM800L draws high current bursts during transmit. Ensure:
 ## Implementation (Phase 1)
 
 - **File**: `src/gsm_sim800l.py`
+- **Public helper**: `send_at(ser, cmd, timeout)` — used by `hardware_check` and `gsm_test`.
 - **Class**: `GSMSIM800L(device=None, dry_run=False)`
-- **Usage**: `gsm.open()`; `ok = gsm.send_sms(phone, text)`.
+- **Usage**: `gsm.open()`; `ok = gsm.send_sms(phone, text)` (sets text mode before send).
+
+## Isolated bench test
+
+```bash
+python -m src.gsm_test
+python -m src.gsm_test --send-sms +639171234567 "Test message"
+```
+
+Also covered by `python -m src.hardware_check` (multi-baud AT + quick SIM/signal if AT succeeds).
 
 ## References
 

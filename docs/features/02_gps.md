@@ -34,6 +34,15 @@ See `docs/phase0_module_boundaries.md` — `gps`:
 - **Usage**: `gps.open()`; `fix = gps.get_fix(timeout_sec=5.0)`; returns `{lat, lon}` or None.
 - **Config**: `GPS_SERIAL_PORT` in `src/config.py` (e.g. **`None`** on breadboard GPIO-only; **`/dev/ttyUSB0`** for USB GPS).
 
+## Isolated bench test
+
+```bash
+python -m src.gps_test
+python -m src.gps_test --duration-sec 120
+```
+
+Also covered by `python -m src.hardware_check` (short multi-baud GPS probe).
+
 ## References
 
 - NMEA 0183 specification

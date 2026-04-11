@@ -13,17 +13,21 @@ from typing import Any
 from src.config import SIM800L_BAUD, SIM800L_UART_DEVICE
 
 
-def _send_at(ser: Any, cmd: str, timeout: float = 2.0) -> str:
-    """Send AT command and return response."""
+def send_at(ser: Any, cmd: str, timeout: float = 2.0) -> str:
+    """Send AT command and return response (newline-terminated commands)."""
     ser.reset_input_buffer()
     ser.write((cmd + "\r\n").encode())
     deadline = time.monotonic() + timeout
-    buf = []
+    buf: list[str] = []
     while time.monotonic() < deadline:
         if ser.in_waiting:
             buf.append(ser.read(ser.in_waiting).decode("ascii", errors="replace"))
         time.sleep(0.05)
     return "".join(buf)
+
+
+# Backward-compatible alias
+_send_at = send_at
 
 
 class GSMSIM800L:
@@ -53,10 +57,13 @@ class GSMSIM800L:
             import serial
 
             self._ser = serial.Serial(self._device, SIM800L_BAUD, timeout=0.5)
-            r = _send_at(self._ser, "AT")
+            r = send_at(self._ser, "AT")
             if "OK" not in r:
                 self._ser.close()
                 self._ser = None
+                return
+            # Disable command echo for cleaner responses on subsequent commands.
+            send_at(self._ser, "ATE0", timeout=1.0)
         except (ImportError, OSError):
             self._ser = None
 
@@ -87,12 +94,15 @@ class GSMSIM800L:
         if self._ser is None:
             return False
         try:
-            r = _send_at(self._ser, f'AT+CMGS="{phone}"', timeout=1.0)
+            r = send_at(self._ser, "AT+CMGF=1", timeout=2.0)
+            if "OK" not in r:
+                return False
+            r = send_at(self._ser, f'AT+CMGS="{phone}"', timeout=3.0)
             if ">" not in r:
                 return False
             time.sleep(0.2)
             self._ser.write((text + "\x1a").encode())
-            r = _send_at(self._ser, "", timeout=15.0)
+            r = send_at(self._ser, "", timeout=15.0)
             return "OK" in r
         except Exception:
             return False
@@ -106,7 +116,7 @@ class GSMSIM800L:
         """
         if self._dry_run or self._ser is None:
             return 99
-        r = _send_at(self._ser, "AT+CSQ")
+        r = send_at(self._ser, "AT+CSQ")
         for line in r.splitlines():
             if "+CSQ:" in line:
                 try:

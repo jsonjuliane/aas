@@ -8,21 +8,15 @@ See docs/features/08_logging.md.
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 
-from src.config import LOGS_DIR
-
-
-def _project_root() -> Path:
-    """Project root (parent of src/)."""
-    return Path(__file__).resolve().parent.parent
+from src.config import LOGS_DIR, PROJECT_ROOT
 
 
 def _ensure_log_dir() -> Path:
     """Ensure logs directory exists; return path."""
-    root = _project_root()
+    root = PROJECT_ROOT
     log_dir = root / LOGS_DIR
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir

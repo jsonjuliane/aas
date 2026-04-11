@@ -198,7 +198,9 @@ From Terminal (with venv activated):
 ```bash
 python -m src.main                   # Normal (with hardware)
 python -m src.main --dry-run         # Simulate without hardware
-python -m src.hardware_check  # One-shot hardware probe with detailed causes/log
+python -m src.hardware_check  # One-shot hardware probe (exit 1 if any FAIL)
+python -m src.gsm_test            # GSM: multi-baud AT, SIM, registration, signal
+python -m src.gps_test            # GPS: auto baud, NMEA stream, $GPGGA fixes
 python -m src.main --test-alert      # One full alert cycle immediately (bench test)
 python -m src.buzzer_test --silence-only  # Drive buzzer off, then exit (bring-up)
 python -m src.buzzer_test     # Buzzer ON briefly then OFF (bench)

@@ -26,7 +26,9 @@ This document describes the Phase 1 codebase and how to run it.
 |------|---------|----------|
 | Normal | `python -m src.main` | Pi with hardware |
 | Dry run | `python -m src.main --dry-run` | Development without hardware |
-| Hardware check | `python -m src.hardware_check` | One-shot I2C/GPIO/GSM/GPS/MP3 readiness check |
+| Hardware check | `python -m src.hardware_check` | One-shot I2C/GPIO/GSM/GPS/MP3 readiness check (exit 1 on FAIL) |
+| GSM isolated test | `python -m src.gsm_test` | Multi-baud AT, SIM/registration/signal; optional `--send-sms` |
+| GPS isolated test | `python -m src.gps_test` | Auto baud, NMEA stream, `$GPGGA` fixes (`--duration-sec`) |
 | Test alert | `python -m src.main --test-alert` | One full alert cycle immediately (bench) |
 | Silence buzzer | `python -m src.buzzer_test --silence-only` | Drive GPIO off, exit (stuck buzzer at boot) |
 | Buzzer bench test | `python -m src.buzzer_test` | Buzzer ON briefly then OFF (`--duration-sec` for duration) |
