@@ -14,8 +14,12 @@ from src.config import GPS_BAUD, GPS_RX_GPIO, GPS_SERIAL_PORT
 
 
 def _parse_gpgga(line: str) -> dict | None:
-    """Parse $GPGGA for lat, lon, fix quality. Returns None if invalid."""
-    if not line.startswith("$GPGGA"):
+    """Parse any *GGA sentence for lat, lon, fix quality."""
+    if not line.startswith("$"):
+        return None
+    sentence_type = line.split(",", 1)[0].strip()
+    # Modern receivers often emit $GNGGA/$GLGGA instead of only $GPGGA.
+    if not sentence_type.endswith("GGA"):
         return None
     parts = line.split(",")
     if len(parts) < 10:

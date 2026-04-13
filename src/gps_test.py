@@ -227,7 +227,7 @@ def _stream_pigpio(pi: object, baud: int, duration_sec: float) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="Isolated GPS NMEA stream test (auto baud, $GPGGA fixes)"
+        description="Isolated GPS NMEA stream test (auto baud, any *GGA fixes)"
     )
     ap.add_argument(
         "--duration-sec",
