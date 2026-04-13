@@ -39,6 +39,16 @@ Place pre-recorded countdown files in `assets/audio/` as `001.mp3`, `002.mp3`, e
 - **Usage**: `audio.open()`; `audio.play_track(1)` for countdown.
 - **Config**: `MP3_SERIAL_PORT` in `src/config.py`.
 
+
+## Isolated bench test
+
+```bash
+python -m src.audio_test --track 1
+python -m src.audio_test --probe-range 5 --track-sec 3
+```
+
+Because most bench wiring is TX-only to DFPlayer, the script confirms playback by audible output (speaker), not by reading a file list from the module.
+
 ## References
 
 - [DFPlayer Mini Datasheet](https://wiki.dfrobot.com/DFPlayer_Mini_SKU_DFR0299)

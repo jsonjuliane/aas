@@ -189,7 +189,7 @@ Edit `config/contacts.family.json` and add real emergency phone numbers (E.164 f
    - If using the venv: **Tools → Options → Interpreter** → choose **Alternative Python 3** → browse to `AccidentAlertSystem/.venv/bin/python3`.
 4. Press **F5** or **Run** to start.
 
-The app will monitor the sensor. On impact, it runs a 5-second countdown; press the cancel button (GPIO 17) to abort, or let it send SMS with GPS location.
+The app monitors the sensor. On validated impact (3–5g + tilt), it plays countdown audio (track 1), logs the event payload, then exits for this phase.
 
 ### Run from Terminal
 
@@ -197,13 +197,15 @@ From Terminal (with venv activated):
 
 ```bash
 python -m src.main                   # Normal (with hardware)
+python -m src.main --action-cooldown-sec 10 --impact-log-cooldown-sec 1.0  # Tune debounce
 python -m src.main --dry-run         # Simulate without hardware
 python -m src.hardware_check  # One-shot hardware probe (exit 1 if any FAIL)
 python -m src.gsm_test            # GSM: multi-baud AT, SIM, registration, signal
 python -m src.gps_test            # GPS: auto baud, NMEA stream, $GPGGA fixes
-python -m src.main --test-alert      # One full alert cycle immediately (bench test)
+python -m src.main --test-alert      # Force impact path: play countdown audio then exit (bench)
 python -m src.buzzer_test --silence-only  # Drive buzzer off, then exit (bring-up)
 python -m src.buzzer_test     # Buzzer ON briefly then OFF (bench)
+python -m src.audio_test --track 1  # Play DFPlayer track 1 (audio bench)
 python -m src.mpu_collision_test     # Isolated MPU tap/collision test (JSONL: collisions + summary by default)
 ```
 

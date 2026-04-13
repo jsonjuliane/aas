@@ -1,5 +1,5 @@
 """
-Isolated GPS NMEA stream test (auto baud, live lines, optional fix).
+Isolated GPS NMEA stream test (auto baud, readable fix output).
 
 Run on Raspberry Pi:
     python -m src.gps_test
@@ -19,6 +19,17 @@ if str(_PROJECT) not in sys.path:
 
 from src.config import GPS_BAUD, GPS_RX_GPIO, GPS_SERIAL_PORT
 from src.gps import _parse_gpgga
+
+
+def _print_header(title: str) -> None:
+    print(f"\n=== {title} ===")
+
+
+def _print_fix(lat: float, lon: float, fix_type: int) -> None:
+    print("\nCurrent GPS Coordinates")
+    print(f"  Latitude : {lat:.6f}")
+    print(f"  Longitude: {lon:.6f}")
+    print(f"  Fix type : {fix_type}")
 
 
 def _baud_candidates() -> list[int]:
@@ -119,7 +130,11 @@ def _stream_kernel(ser: object, duration_sec: float, baud: int) -> int:
     last_fix: dict | None = None
     t_end = time.monotonic() + duration_sec
     buf = ""
-    print(f"Streaming on kernel serial @ {baud} for {duration_sec}s…\n")
+    _print_header("GPS stream")
+    print(f"Source   : kernel serial")
+    print(f"Baud     : {baud}")
+    print(f"Duration : {duration_sec:.0f}s")
+    print("Status   : listening for NMEA sentences...\n")
     while time.monotonic() < t_end:
         try:
             chunk = ser.read(512)  # type: ignore[attr-defined]
@@ -134,24 +149,27 @@ def _stream_kernel(ser: object, duration_sec: float, baud: int) -> int:
                 continue
             lines += 1
             if line.startswith("$"):
-                print(line[:100])
+                print(f"NMEA: {line[:100]}")
                 parsed = _parse_gpgga(line)
                 if parsed and parsed.get("fix", 0) in (1, 2):
                     fixes += 1
                     last_fix = {"lat": parsed["lat"], "lon": parsed["lon"]}
-                    print(
-                        f"  [fix] lat={parsed['lat']:.6f} lon={parsed['lon']:.6f}"
-                    )
+                    _print_fix(parsed["lat"], parsed["lon"], int(parsed.get("fix", 0)))
         else:
             time.sleep(0.02)
     try:
         ser.close()  # type: ignore[attr-defined]
     except Exception:
         pass
-    print(
-        f"\n[summary] baud={baud} lines={lines} gpgga_fixes={fixes} "
-        f"last_fix={last_fix!r}"
-    )
+    _print_header("GPS summary")
+    print(f"Baud used          : {baud}")
+    print(f"NMEA lines received: {lines}")
+    print(f"Valid fixes found  : {fixes}")
+    if last_fix:
+        print(f"Last latitude      : {last_fix['lat']:.6f}")
+        print(f"Last longitude     : {last_fix['lon']:.6f}")
+    else:
+        print("Last coordinates   : none")
     return 0
 
 
@@ -161,7 +179,11 @@ def _stream_pigpio(pi: object, baud: int, duration_sec: float) -> int:
     last_fix: dict | None = None
     buf = ""
     t_end = time.monotonic() + duration_sec
-    print(f"Streaming GPIO soft UART RX{GPS_RX_GPIO} @ {baud} for {duration_sec}s…\n")
+    _print_header("GPS stream")
+    print(f"Source   : GPIO soft UART RX{GPS_RX_GPIO}")
+    print(f"Baud     : {baud}")
+    print(f"Duration : {duration_sec:.0f}s")
+    print("Status   : listening for NMEA sentences...\n")
     while time.monotonic() < t_end:
         try:
             count, data = pi.bb_serial_read(GPS_RX_GPIO)  # type: ignore[attr-defined]
@@ -176,14 +198,12 @@ def _stream_pigpio(pi: object, baud: int, duration_sec: float) -> int:
                 continue
             lines += 1
             if line.startswith("$"):
-                print(line[:100])
+                print(f"NMEA: {line[:100]}")
                 parsed = _parse_gpgga(line)
                 if parsed and parsed.get("fix", 0) in (1, 2):
                     fixes += 1
                     last_fix = {"lat": parsed["lat"], "lon": parsed["lon"]}
-                    print(
-                        f"  [fix] lat={parsed['lat']:.6f} lon={parsed['lon']:.6f}"
-                    )
+                    _print_fix(parsed["lat"], parsed["lon"], int(parsed.get("fix", 0)))
         time.sleep(0.02)
     try:
         pi.bb_serial_read_close(GPS_RX_GPIO)  # type: ignore[attr-defined]
@@ -193,10 +213,15 @@ def _stream_pigpio(pi: object, baud: int, duration_sec: float) -> int:
         pi.stop()  # type: ignore[attr-defined]
     except Exception:
         pass
-    print(
-        f"\n[summary] baud={baud} lines={lines} gpgga_fixes={fixes} "
-        f"last_fix={last_fix!r}"
-    )
+    _print_header("GPS summary")
+    print(f"Baud used          : {baud}")
+    print(f"NMEA lines received: {lines}")
+    print(f"Valid fixes found  : {fixes}")
+    if last_fix:
+        print(f"Last latitude      : {last_fix['lat']:.6f}")
+        print(f"Last longitude     : {last_fix['lon']:.6f}")
+    else:
+        print("Last coordinates   : none")
     return 0
 
 
@@ -216,25 +241,28 @@ def main() -> int:
     bauds = _baud_candidates()
     using = GPS_SERIAL_PORT if GPS_SERIAL_PORT else f"GPIO soft UART RX{GPS_RX_GPIO}"
 
-    print("SmartShell — GPS isolated test\n")
-    print(f"Target: {using}\n")
+    _print_header("SmartShell GPS isolated test")
+    print(f"Target interface: {using}")
+    print(f"Baud candidates : {bauds}")
 
     if GPS_SERIAL_PORT:
         baud, ser = _find_baud_kernel(GPS_SERIAL_PORT, bauds)
         if baud is None or ser is None:
-            print(
-                f"[WARN] No NMEA-like data ($) on {GPS_SERIAL_PORT} "
-                f"across bauds {bauds}. Check wiring, power, antenna."
-            )
+            _print_header("GPS result")
+            print("No NMEA data detected.")
+            print(f"Interface: {GPS_SERIAL_PORT}")
+            print(f"Tried    : {bauds}")
+            print("Check TX wiring, power/ground, antenna open sky, and protocol mode.")
             return 1
         return _stream_kernel(ser, duration, baud)
 
     baud, pi = _find_baud_pigpio(bauds)
     if baud is None or pi is None:
-        print(
-            f"[WARN] No data on soft UART RX{GPS_RX_GPIO} across bauds {bauds}. "
-            "Check pigpiod, GPS TX→GPIO20, power, antenna."
-        )
+        _print_header("GPS result")
+        print("No NMEA data detected.")
+        print(f"Interface: GPIO soft UART RX{GPS_RX_GPIO}")
+        print(f"Tried    : {bauds}")
+        print("Check pigpiod, GPS TX→GPIO20, power/ground, and antenna open sky.")
         return 1
     return _stream_pigpio(pi, baud, duration)
 

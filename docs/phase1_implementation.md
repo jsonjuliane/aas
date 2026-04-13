@@ -29,12 +29,15 @@ This document describes the Phase 1 codebase and how to run it.
 | Hardware check | `python -m src.hardware_check` | One-shot I2C/GPIO/GSM/GPS/MP3 readiness check (exit 1 on FAIL) |
 | GSM isolated test | `python -m src.gsm_test` | Multi-baud AT, SIM/registration/signal; optional `--send-sms` |
 | GPS isolated test | `python -m src.gps_test` | Auto baud, NMEA stream, `$GPGGA` fixes (`--duration-sec`) |
-| Test alert | `python -m src.main --test-alert` | One full alert cycle immediately (bench) |
+| Test alert | `python -m src.main --test-alert` | Trigger action path immediately (countdown audio then exit) |
 | Silence buzzer | `python -m src.buzzer_test --silence-only` | Drive GPIO off, exit (stuck buzzer at boot) |
 | Buzzer bench test | `python -m src.buzzer_test` | Buzzer ON briefly then OFF (`--duration-sec` for duration) |
+| Audio bench test | `python -m src.audio_test --track 1` | Play DFPlayer track 1; use `--probe-range N` to find audible tracks |
 | MPU isolated test | `python -m src.mpu_collision_test` | Tap/collision test; JSONL defaults to events + summary (`--log-all-samples` for verbose) |
 
 Legacy `--trigger` is accepted as an alias for `--test-alert`.
+
+`src.main` also supports debounce tuning: `--action-cooldown-sec` and `--impact-log-cooldown-sec`.
 
 ---
 

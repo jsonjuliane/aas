@@ -11,10 +11,12 @@ import math
 from typing import Any
 
 from src.config import (
+    ACTION_COOLDOWN_SEC,
     ACCEL_THRESHOLD_G,
     ACCEL_THRESHOLD_G_MAX,
     MPU6050_I2C_ADDR,
     MPU6050_I2C_BUS,
+    TILT_DELTA_THRESHOLD_G,
 )
 
 # MPU-6050 register addresses
@@ -127,8 +129,8 @@ class SensorMPU6050:
         """
         Check if acceleration and orientation indicate a potential accident.
 
-        Uses magnitude threshold (3g–5g) and optional tilt validation.
-        Returns True if threshold exceeded.
+        Uses magnitude threshold + tilt validation.
+        Returns True only when both a spike and abnormal orientation change exist.
 
         Returns:
             True if impact detected, False otherwise.
@@ -136,24 +138,77 @@ class SensorMPU6050:
         if self._dry_run:
             return False
         try:
-            ax, ay, az = self.read_g()
+            return bool(self.evaluate_impact()["actual_collision"])
         except MPU6050Error:
             return False
+
+    def evaluate_impact(self) -> dict[str, float | bool | dict[str, float]]:
+        """
+        Evaluate current sample against collision rules and return metrics.
+
+        Returns:
+            {
+                "accel_mag_g": float,
+                "tilt_delta_g": float,
+                "impact_window_hit": bool,   # ACCEL_THRESHOLD_G..ACCEL_THRESHOLD_G_MAX
+                "tilt_hit": bool,            # tilt_delta_g > TILT_DELTA_THRESHOLD_G
+                "actual_collision": bool,    # impact_window_hit and tilt_hit
+                "action_cooldown_sec": float,
+                "thresholds": {...},
+                "accel_g": {"ax","ay","az"},
+                "gyro_dps": {"gx","gy","gz"},
+            }
+        """
+        if self._dry_run:
+            return {
+                "accel_mag_g": 0.0,
+                "tilt_delta_g": 0.0,
+                "impact_window_hit": False,
+                "tilt_hit": False,
+                "actual_collision": False,
+                "action_cooldown_sec": ACTION_COOLDOWN_SEC,
+                "thresholds": {
+                    "impact_min_g": ACCEL_THRESHOLD_G,
+                    "impact_max_g": ACCEL_THRESHOLD_G_MAX,
+                    "tilt_delta_g": TILT_DELTA_THRESHOLD_G,
+                },
+                "accel_g": {"ax": 0.0, "ay": 0.0, "az": 0.0},
+                "gyro_dps": {"gx": 0.0, "gy": 0.0, "gz": 0.0},
+            }
+        try:
+            raw = self.read_raw()
+        except Exception as e:
+            raise MPU6050Error(f"MPU-6050 read failed: {e}") from e
+        ax = float(raw["ax"])
+        ay = float(raw["ay"])
+        az = float(raw["az"])
+        gx = float(raw["gx"])
+        gy = float(raw["gy"])
+        gz = float(raw["gz"])
         mag = math.sqrt(ax * ax + ay * ay + az * az)
-        if mag < ACCEL_THRESHOLD_G:
-            return False
-        if mag > ACCEL_THRESHOLD_G_MAX:
-            return True  # Severe impact
-        # In range: validate with optional tilt
+        impact_window_hit = ACCEL_THRESHOLD_G <= mag <= ACCEL_THRESHOLD_G_MAX
+
+        tilt_change = 0.0
         if self._baseline:
             bx, by, bz = self._baseline
-            tilt_change = math.sqrt(
-                (ax - bx) ** 2 + (ay - by) ** 2 + (az - bz) ** 2
-            )
-            if tilt_change > 1.5:  # Significant orientation change
-                return True
-        # mag already in [ACCEL_THRESHOLD_G, ACCEL_THRESHOLD_G_MAX] here
-        return True
+            tilt_change = math.sqrt((ax - bx) ** 2 + (ay - by) ** 2 + (az - bz) ** 2)
+        tilt_hit = tilt_change > TILT_DELTA_THRESHOLD_G
+        actual_collision = impact_window_hit and tilt_hit
+        return {
+            "accel_mag_g": mag,
+            "tilt_delta_g": tilt_change,
+            "impact_window_hit": impact_window_hit,
+            "tilt_hit": tilt_hit,
+            "actual_collision": actual_collision,
+            "action_cooldown_sec": ACTION_COOLDOWN_SEC,
+            "thresholds": {
+                "impact_min_g": ACCEL_THRESHOLD_G,
+                "impact_max_g": ACCEL_THRESHOLD_G_MAX,
+                "tilt_delta_g": TILT_DELTA_THRESHOLD_G,
+            },
+            "accel_g": {"ax": ax, "ay": ay, "az": az},
+            "gyro_dps": {"gx": gx, "gy": gy, "gz": gz},
+        }
 
     def close(self) -> None:
         """Release I2C bus."""

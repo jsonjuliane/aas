@@ -55,6 +55,9 @@ CANCEL_BUTTON_GPIO = 17  # Optional; add if you wire a cancel button
 # Accident detection
 ACCEL_THRESHOLD_G = 3.0  # Minimum g-force to flag potential accident
 ACCEL_THRESHOLD_G_MAX = 5.0  # Upper bound for validation
+TILT_DELTA_THRESHOLD_G = 1.5  # Baseline delta required to validate true collision
+ACTION_COOLDOWN_SEC = 8.0  # Debounce action flow after a true collision
+IMPACT_LOG_COOLDOWN_SEC = 0.75  # Debounce impact candidate logs in main loop
 COUNTDOWN_SECONDS = 5
 
 # Paths (relative to project root)

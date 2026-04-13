@@ -4,7 +4,7 @@
 
 | Module | File | Maps to hardware | Behavior when correctly configured |
 |--------|------|------------------|-------------------------------------|
-| **Main loop** | `main.py` | All | Polls sensor; on impact → countdown → cancel window → GPS + SMS + log. |
+| **Main loop** | `main.py` | All | Polls sensor; logs 3–5g impact-window samples; on validated impact (3–5g + tilt) plays countdown audio then exits (current phase). |
 | **Sensor** | `sensor_mpu6050.py` | MPU-6050 @ I2C `0x68` | `calibrate()` at start; `is_impact_detected()` uses accel magnitude + baseline tilt. |
 | **GPS** | `gps.py` | GPS UART | Reads NMEA from `GPS_SERIAL_PORT` **or** GPIO software UART (pigpio) when port is `None` (default for GPIO20/21 wiring). `get_fix()` parses `$GPGGA`. |
 | **GSM** | `gsm_sim800l.py` | SIM800L on `/dev/serial0` | `send_sms()` via AT commands. |
@@ -37,7 +37,7 @@ Then run:
 python -m src.main
 ```
 
-Expected: continuous monitoring; real impacts trip the flow; SMS goes out if not cancelled and GSM/GPS work.
+Expected: continuous monitoring; 3–5g candidates are logged with flags; validated impact (with tilt) plays countdown audio and exits.
 
 ---
 
@@ -55,9 +55,12 @@ Expected: continuous monitoring; real impacts trip the flow; SMS goes out if not
 ## CLI flags and Thonny
 
 - `--dry-run`: no I2C/UART/GPIO; useful on a laptop.  
-- `--test-alert`: one immediate full alert cycle (bench test). `--trigger` is a hidden alias.  
+- `--test-alert`: trigger impact action path immediately (countdown audio then exit). `--trigger` is a hidden alias.  
+- `--action-cooldown-sec`: debounce consecutive true-collision actions (default from config).  
+- `--impact-log-cooldown-sec`: debounce repeated 3–5g impact-window logs (default from config).  
 - `python -m src.buzzer_test --silence-only`: drive buzzer GPIO off and exit (bring-up).  
 - `python -m src.buzzer_test` / `--duration-sec`: buzzer ON for a short time then OFF (bench).  
+- `python -m src.audio_test --track 1`: play DFPlayer track 1; use `--probe-range N` to test track availability by ear.  
 - `python -m src.hardware_check`: full probe; **exit 1** if any `[FAIL]` line.  
 - `python -m src.gsm_test`: GSM diagnostics (baud sweep, SIM, signal); optional `--send-sms PHONE "msg"`.  
 - `python -m src.gps_test`: GPS NMEA stream test (`--duration-sec`).  

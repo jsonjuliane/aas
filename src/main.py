@@ -2,7 +2,7 @@
 SmartShell — Main entry point.
 
 Runnable in Thonny on Raspberry Pi. Detects impact, runs countdown,
-allows cancel, sends SMS with GPS if not cancelled.
+plays countdown audio, then exits.
 
 Usage:
     python -m src.main
@@ -23,14 +23,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.config import COUNTDOWN_SECONDS
+from src.config import ACTION_COOLDOWN_SEC, COUNTDOWN_SECONDS, IMPACT_LOG_COOLDOWN_SEC
 from src import (
     audio_mp3,
     buzzer_hw,
-    cancel,
-    contacts,
-    gps,
-    gsm_sim800l,
     logging_store,
     sensor_mpu6050,
 )
@@ -41,9 +37,11 @@ def run(
     core_flow_only: bool = False,
     test_alert_immediately: bool = False,
     poll_interval_sec: float = 0.05,
+    action_cooldown_sec: float = ACTION_COOLDOWN_SEC,
+    impact_log_cooldown_sec: float = IMPACT_LOG_COOLDOWN_SEC,
 ) -> None:
     """
-    Main loop: monitor sensor, on impact run countdown → cancel check → SMS.
+    Main loop: monitor sensor, on impact play countdown audio then exit.
 
     Args:
         dry_run: If True, no hardware access; simulate.
@@ -52,126 +50,152 @@ def run(
         poll_interval_sec: Seconds between sensor polls.
     """
     sensor = sensor_mpu6050.SensorMPU6050(dry_run=dry_run)
-    gps_mod = gps.GPSModule(dry_run=dry_run)
-    gsm_mod = gsm_sim800l.GSMSIM800L(dry_run=dry_run)
     audio_mod = audio_mp3.AudioMP3(dry_run=dry_run)
 
     try:
         if not dry_run:
             buzzer_hw.silence()
             sensor.calibrate()
-            cancel.init()
-        gps_mod.open()
-        gsm_mod.open()
         audio_mod.open()
         _print_init_status(
             dry_run=dry_run,
             core_flow_only=core_flow_only,
-            gps_mod=gps_mod,
-            gsm_mod=gsm_mod,
         )
 
         if dry_run:
-            print("SmartShell running in DRY RUN (no hardware). Use Ctrl+C to stop.")
+            print("Simulation mode is running. Press Ctrl+C to stop.")
         else:
-            print("SmartShell monitoring. Press Ctrl+C to stop.")
+            print("Monitoring for impact events. Press Ctrl+C to stop.")
 
         test_alert_done = False
+        last_action_at = -1e9
+        last_impact_log_at = -1e9
         while True:
             if test_alert_immediately and not test_alert_done:
                 test_alert_done = True
-                print("[test-alert] Running one full alert cycle (no sensor wait).")
+                print("[test-alert] Bench mode: triggering the countdown flow now.")
                 if core_flow_only:
-                    print("[core-flow] Impact path reached. Skipping countdown/GPS/SMS by design.")
+                    print("[core-flow] Test trigger reached. Action audio is skipped in this mode.")
                 else:
                     _handle_alert(
                         sensor=sensor,
-                        gps_mod=gps_mod,
-                        gsm_mod=gsm_mod,
                         audio_mod=audio_mod,
                         dry_run=dry_run,
                     )
+                return
+
+            eval_data = sensor.evaluate_impact()
+            now = time.monotonic()
+
+            # Collision-test-like logging in main:
+            # log only when impact is in 3..5g window, with explicit tilt/action booleans.
+            if bool(eval_data["impact_window_hit"]):
+                if (now - last_impact_log_at) >= max(0.0, impact_log_cooldown_sec):
+                    logging_store.log_event(
+                        {
+                            "event": "impact_window_hit_main",
+                            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+                            "metrics": {
+                                "accel_mag_g": eval_data["accel_mag_g"],
+                                "tilt_delta_g": eval_data["tilt_delta_g"],
+                            },
+                            "thresholds": eval_data["thresholds"],
+                            "flags": {
+                                "impact_window_hit": bool(eval_data["impact_window_hit"]),
+                                "tilt_hit": bool(eval_data["tilt_hit"]),
+                                "actual_collision": bool(eval_data["actual_collision"]),
+                                # Action decision for this sample is set below.
+                                "action_collision": False,
+                            },
+                            "accel_g": eval_data["accel_g"],
+                            "gyro_dps": eval_data["gyro_dps"],
+                        }
+                    )
+                    last_impact_log_at = now
+
+            actual_collision = bool(eval_data["actual_collision"])
+            in_action_cooldown = (now - last_action_at) < max(0.0, action_cooldown_sec)
+            action_collision = actual_collision and (not in_action_cooldown) and (not core_flow_only)
+
+            if actual_collision and in_action_cooldown:
                 continue
 
-            if sensor.is_impact_detected():
+            if actual_collision:
+                last_action_at = now
                 if core_flow_only:
-                    print("Impact detected (core-flow). Validation passed; alert side effects skipped.")
+                    print("Impact was validated. Core-flow mode keeps this as monitoring-only.")
                     logging_store.log_event(
                         {
                             "event": "impact_detected_core_flow",
                             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+                            "metrics": {
+                                "accel_mag_g": eval_data["accel_mag_g"],
+                                "tilt_delta_g": eval_data["tilt_delta_g"],
+                            },
+                            "thresholds": eval_data["thresholds"],
+                            "flags": {
+                                "impact_window_hit": bool(eval_data["impact_window_hit"]),
+                                "tilt_hit": bool(eval_data["tilt_hit"]),
+                                "actual_collision": actual_collision,
+                                "action_collision": False,
+                            },
+                            "accel_g": eval_data["accel_g"],
+                            "gyro_dps": eval_data["gyro_dps"],
                         }
                     )
                 else:
-                    print("Impact detected. Starting countdown...")
+                    print("Collision conditions met. Playing countdown audio now.")
+                    logging_store.log_event(
+                        {
+                            "event": "impact_action_triggered",
+                            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+                            "metrics": {
+                                "accel_mag_g": eval_data["accel_mag_g"],
+                                "tilt_delta_g": eval_data["tilt_delta_g"],
+                            },
+                            "thresholds": eval_data["thresholds"],
+                            "flags": {
+                                "impact_window_hit": bool(eval_data["impact_window_hit"]),
+                                "tilt_hit": bool(eval_data["tilt_hit"]),
+                                "actual_collision": actual_collision,
+                                "action_collision": action_collision,
+                            },
+                            "accel_g": eval_data["accel_g"],
+                            "gyro_dps": eval_data["gyro_dps"],
+                        }
+                    )
                     _handle_alert(
                         sensor=sensor,
-                        gps_mod=gps_mod,
-                        gsm_mod=gsm_mod,
                         audio_mod=audio_mod,
                         dry_run=dry_run,
                     )
+                    return
             time.sleep(poll_interval_sec)
     except KeyboardInterrupt:
         print("\nStopped.")
     finally:
         sensor.close()
-        gps_mod.close()
-        gsm_mod.close()
         audio_mod.close()
 
 
 def _handle_alert(
     sensor: sensor_mpu6050.SensorMPU6050,
-    gps_mod: gps.GPSModule,
-    gsm_mod: gsm_sim800l.GSMSIM800L,
     audio_mod: audio_mp3.AudioMP3,
     dry_run: bool,
 ) -> None:
-    """Run countdown, check cancel, send SMS if not cancelled."""
+    """Play countdown audio and log event for this phase."""
     ax, ay, az = sensor.read_g() if not dry_run else (0.0, 0.0, 0.0)
-    try:
-        phones, template = contacts.load_family_contacts()
-    except (FileNotFoundError, ValueError) as e:
-        print(f"Config error: {e}")
-        return
 
     # Play countdown audio
     audio_mod.play_track(1)
-
-    # Wait for cancel
-    cancelled = cancel.wait_for_cancel(COUNTDOWN_SECONDS, dry_run=dry_run)
-    if cancelled:
-        print("Alert cancelled by user.")
-        logging_store.log_event(
-            {
-                "event": "alert_cancelled",
-                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
-                "accel_g": {"ax": ax, "ay": ay, "az": az},
-            }
-        )
-        return
-
-    # Get GPS and send SMS
-    fix = gps_mod.get_fix(timeout_sec=5.0)
-    lat = fix["lat"] if fix else None
-    lon = fix["lon"] if fix else None
-    msg = contacts.format_message(template, lat, lon)
-
-    for phone in phones:
-        ok = gsm_mod.send_sms(phone, msg)
-        status = "sent" if ok else "failed"
-        print(f"SMS to {phone}: {status}")
+    print(f"Countdown window ({COUNTDOWN_SECONDS}s) audio played. Exiting run.")
 
     logging_store.log_event(
         {
-            "event": "alert_sent",
+            "event": "alert_countdown_played",
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
             "accel_g": {"ax": ax, "ay": ay, "az": az},
-            "lat": lat,
-            "lon": lon,
-            "recipients": phones,
-            "cancelled": False,
+            "countdown_seconds": COUNTDOWN_SECONDS,
         }
     )
 
@@ -179,19 +203,14 @@ def _handle_alert(
 def _print_init_status(
     dry_run: bool,
     core_flow_only: bool,
-    gps_mod: gps.GPSModule,
-    gsm_mod: gsm_sim800l.GSMSIM800L,
 ) -> None:
-    """Print startup status for the top-priority modules."""
+    """Print startup status for the current phase flow."""
     if dry_run:
-        print("Startup check (dry-run): sensor/GPS/GSM opens are simulated.")
+        print("Systems ready (simulation). Sensor and audio checks are mocked.")
         return
-    gps_ok = gps_mod._ser is not None  # debug visibility for bench bring-up
-    gsm_ok = gsm_mod._ser is not None  # debug visibility for bench bring-up
-    print(f"Startup check: GPS serial {'OK' if gps_ok else 'NOT OPEN'}")
-    print(f"Startup check: GSM serial {'OK' if gsm_ok else 'NOT OPEN'}")
+    print("Systems ready. Sensor calibration complete and audio channel is available.")
     if core_flow_only:
-        print("Mode: core-flow-only (init + monitoring + threshold/validation only).")
+        print("Core-flow mode active: monitoring and logs only, no action audio.")
 
 
 def main() -> int:
@@ -217,12 +236,26 @@ def main() -> int:
         action="store_true",
         help=argparse.SUPPRESS,
     )
+    ap.add_argument(
+        "--action-cooldown-sec",
+        type=float,
+        default=ACTION_COOLDOWN_SEC,
+        help="Debounce true-collision action trigger (default from config)",
+    )
+    ap.add_argument(
+        "--impact-log-cooldown-sec",
+        type=float,
+        default=IMPACT_LOG_COOLDOWN_SEC,
+        help="Debounce impact-window logs (default from config)",
+    )
     args = ap.parse_args()
     test_now = args.test_alert or args.trigger
     run(
         dry_run=args.dry_run,
         core_flow_only=args.core_flow_only,
         test_alert_immediately=test_now,
+        action_cooldown_sec=args.action_cooldown_sec,
+        impact_log_cooldown_sec=args.impact_log_cooldown_sec,
     )
     return 0
 
