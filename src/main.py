@@ -27,6 +27,8 @@ from src.config import ACTION_COOLDOWN_SEC, COUNTDOWN_SECONDS, IMPACT_LOG_COOLDO
 from src import (
     audio_mp3,
     buzzer_hw,
+    gps,
+    hardware_check,
     logging_store,
     sensor_mpu6050,
 )
@@ -60,6 +62,7 @@ def run(
         _print_init_status(
             dry_run=dry_run,
             core_flow_only=core_flow_only,
+            audio_mod=audio_mod,
         )
 
         if dry_run:
@@ -203,14 +206,65 @@ def _handle_alert(
 def _print_init_status(
     dry_run: bool,
     core_flow_only: bool,
+    audio_mod: audio_mp3.AudioMP3,
 ) -> None:
     """Print startup status for the current phase flow."""
     if dry_run:
         print("Systems ready (simulation). Sensor and audio checks are mocked.")
         return
-    print("Systems ready. Sensor calibration complete and audio channel is available.")
+    print("Systems ready. Sensor calibration complete. Running hardware readiness snapshot:")
+    _print_runtime_hardware_snapshot(audio_mod=audio_mod)
     if core_flow_only:
         print("Core-flow mode active: monitoring and logs only, no action audio.")
+
+
+def _print_runtime_hardware_snapshot(audio_mod: audio_mp3.AudioMP3) -> None:
+    """Print quick hardware-ready snapshot for runtime flow."""
+    buzzer_ok = buzzer_hw.silence()
+    print(f"[{'OK' if buzzer_ok else 'ERR':5}] Buzzer GPIO silent-state check")
+
+    gsm = hardware_check.probe_gsm_readiness()
+    gsm_ok = bool(gsm.get("ok_at"))
+    gsm_sms_ready = bool(gsm.get("sms_ready"))
+    gsm_tag = "OK" if gsm_ok else "ERR"
+    print(f"[{gsm_tag:5}] GSM link: {gsm.get('detail')}")
+    sms_tag = "OK" if gsm_sms_ready else "ERR"
+    print(f"[{sms_tag:5}] GSM SMS readiness: {'ready' if gsm_sms_ready else 'not ready'}")
+
+    gps_mod = gps.GPSModule(dry_run=False)
+    gps_ok = False
+    gps_hint = "no NMEA sample yet"
+    try:
+        gps_mod.open()
+        if gps_mod._ser is not None or gps_mod._pi is not None:
+            deadline = time.monotonic() + 1.8
+            while time.monotonic() < deadline:
+                line = gps_mod.read_nmea_line()
+                if line and line.startswith("$"):
+                    gps_ok = True
+                    gps_hint = f"NMEA seen: {line[:70]}"
+                    break
+                time.sleep(0.05)
+        else:
+            gps_hint = "transport not open (serial/pigpio unavailable)"
+    finally:
+        gps_mod.close()
+    print(f"[{'OK' if gps_ok else 'ERR':5}] GPS stream check: {gps_hint}")
+
+    mp3_transport_ok = (audio_mod._ser is not None) or (audio_mod._pi is not None)
+    if not mp3_transport_ok:
+        print(f"[{'ERR':5}] MP3 transport unavailable")
+        return
+    tf_count = audio_mod.query_tf_file_count(timeout_sec=0.6)
+    if tf_count is None:
+        print(
+            f"[{'OK':5}] MP3 transport ready (TX path); no feedback response "
+            "(wire DFPlayer TX->Pi RX for file-count diagnostics)"
+        )
+    elif tf_count <= 0:
+        print(f"[{'ERR':5}] MP3 feedback OK but TF file count is {tf_count} (check SD content)")
+    else:
+        print(f"[{'OK':5}] MP3 feedback OK; TF file count: {tf_count}")
 
 
 def main() -> int:

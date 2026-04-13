@@ -206,23 +206,98 @@ def _gsm_baud_candidates() -> list[int]:
     return out
 
 
-def _check_gsm_at() -> None:
+def _parse_csq_value(resp: str) -> int | None:
+    """Extract CSQ RSSI value from +CSQ response."""
+    for line in resp.splitlines():
+        if "+CSQ:" not in line:
+            continue
+        try:
+            value = int(line.split(":")[1].strip().split(",")[0])
+            return value
+        except (ValueError, IndexError):
+            return None
+    return None
+
+
+def _parse_creg_stat(resp: str) -> int | None:
+    """Extract network registration status from +CREG response."""
+    for line in resp.splitlines():
+        if "+CREG:" not in line:
+            continue
+        try:
+            body = line.split(":", 1)[1]
+            parts = [p.strip() for p in body.split(",") if p.strip()]
+            if not parts:
+                return None
+            return int(parts[-1])
+        except (ValueError, IndexError):
+            return None
+    return None
+
+
+def _signal_label(csq: int | None) -> str:
+    """Human-readable CSQ label."""
+    if csq is None:
+        return "unknown"
+    if csq == 99:
+        return "unknown (99)"
+    if csq >= 20:
+        return "excellent"
+    if csq >= 15:
+        return "good"
+    if csq >= 10:
+        return "fair"
+    if csq >= 7:
+        return "usable"
+    return "weak"
+
+
+def probe_gsm_readiness() -> dict[str, object]:
+    """
+    Probe GSM module readiness for SMS workflow.
+
+    Returns:
+        Dict with keys:
+          - ok_at: bool
+          - sms_ready: bool
+          - device: str
+          - baud: int | None
+          - sim_ready: bool
+          - network_registered: bool
+          - csq: int | None
+          - text_mode_ok: bool
+          - detail: str
+    """
     dev = SIM800L_UART_DEVICE
     try:
         import serial
 
         from src.gsm_sim800l import send_at
     except ImportError:
-        _emit("FAIL", "pyserial missing; cannot probe GSM", "pip install pyserial in your venv.")
-        return
+        return {
+            "ok_at": False,
+            "sms_ready": False,
+            "device": dev,
+            "baud": None,
+            "sim_ready": False,
+            "network_registered": False,
+            "csq": None,
+            "text_mode_ok": False,
+            "detail": "pyserial missing; install with pip install pyserial",
+        }
 
     if not os.path.exists(dev):
-        _emit(
-            "FAIL",
-            f"GSM device missing: {dev}",
-            "UART not enabled or wrong path; check ls -l /dev/serial0 and raspi-config serial.",
-        )
-        return
+        return {
+            "ok_at": False,
+            "sms_ready": False,
+            "device": dev,
+            "baud": None,
+            "sim_ready": False,
+            "network_registered": False,
+            "csq": None,
+            "text_mode_ok": False,
+            "detail": "UART device missing; check /dev/serial0 and raspi-config serial settings",
+        }
 
     ser = None
     working_baud: int | None = None
@@ -256,29 +331,96 @@ def _check_gsm_at() -> None:
                 ser.close()
             except Exception:
                 pass
-        return
+        return {
+            "ok_at": False,
+            "sms_ready": False,
+            "device": dev,
+            "baud": None,
+            "sim_ready": False,
+            "network_registered": False,
+            "csq": None,
+            "text_mode_ok": False,
+            "detail": (
+                f"No AT OK across bauds {_gsm_baud_candidates()}. Last raw: {last_snippet}. "
+                "Check TX/RX crossing, power burst capacity (2A+), bulk capacitor, and common GND."
+            ),
+        }
 
+    sim_ready = False
+    network_registered = False
+    csq: int | None = None
+    text_mode_ok = False
     try:
-        print(f"[{'OK':5}] GSM AT OK ({dev} @ {working_baud})")
         send_at(ser, "ATE0", timeout=1.0)
         pin_r = send_at(ser, "AT+CPIN?", timeout=2.0)
-        pin_line = pin_r.replace("\r", " ").strip().split("\n")[-1][:100]
-        print(f"[{'OK':5}] GSM SIM: {pin_line}")
+        sim_ready = "READY" in pin_r.upper()
+
+        creg_r = send_at(ser, "AT+CREG?", timeout=2.0)
+        creg_stat = _parse_creg_stat(creg_r)
+        network_registered = creg_stat in (1, 5)
+
         csq_r = send_at(ser, "AT+CSQ", timeout=2.0)
-        csq_line = csq_r.replace("\r", " ").strip().split("\n")[-1][:100]
-        print(f"[{'OK':5}] GSM signal: {csq_line}")
+        csq = _parse_csq_value(csq_r)
+
+        cmgf_r = send_at(ser, "AT+CMGF=1", timeout=2.0)
+        text_mode_ok = "OK" in cmgf_r
     except OSError as e:
-        _emit(
-            "FAIL",
-            f"GSM AT I/O error: {e}",
-            "Kernel EIO: brownout, bad wiring, or UART driver state — reboot after fixing supply.",
-        )
+        return {
+            "ok_at": True,
+            "sms_ready": False,
+            "device": dev,
+            "baud": working_baud,
+            "sim_ready": False,
+            "network_registered": False,
+            "csq": None,
+            "text_mode_ok": False,
+            "detail": f"AT I/O error after AT OK: {e}",
+        }
     finally:
         if ser is not None:
             try:
                 ser.close()
             except Exception:
                 pass
+
+    signal_ok = csq is not None and csq != 99 and csq >= 7
+    sms_ready = bool(sim_ready and network_registered and signal_ok and text_mode_ok)
+    detail = (
+        f"SIM={'READY' if sim_ready else 'NOT READY'}, "
+        f"NET={'REGISTERED' if network_registered else 'NOT REGISTERED'}, "
+        f"CSQ={csq if csq is not None else 'n/a'} ({_signal_label(csq)}), "
+        f"CMGF={'OK' if text_mode_ok else 'FAIL'}"
+    )
+    return {
+        "ok_at": True,
+        "sms_ready": sms_ready,
+        "device": dev,
+        "baud": working_baud,
+        "sim_ready": sim_ready,
+        "network_registered": network_registered,
+        "csq": csq,
+        "text_mode_ok": text_mode_ok,
+        "detail": detail,
+    }
+
+
+def _check_gsm_at() -> None:
+    gsm = probe_gsm_readiness()
+    if not bool(gsm["ok_at"]):
+        _emit("FAIL", f"GSM not reachable on {gsm['device']}", str(gsm["detail"]))
+        return
+
+    print(f"[{'OK':5}] GSM AT OK ({gsm['device']} @ {gsm['baud']})")
+    print(f"[{'OK':5}] GSM probe: {gsm['detail']}")
+    if bool(gsm["sms_ready"]):
+        print(f"[{'OK':5}] GSM ready for SMS send/receive checks")
+    else:
+        _emit(
+            "WARN",
+            "GSM module reachable but not fully SMS-ready",
+            str(gsm["detail"]),
+            log=True,
+        )
 
 
 def _check_gps_serial() -> None:

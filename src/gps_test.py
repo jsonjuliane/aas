@@ -18,7 +18,7 @@ if str(_PROJECT) not in sys.path:
     sys.path.insert(0, str(_PROJECT))
 
 from src.config import GPS_BAUD, GPS_RX_GPIO, GPS_SERIAL_PORT
-from src.gps import _parse_gpgga
+from src.gps import _parse_gpgga, _parse_gpgga_diag
 
 
 def _print_header(title: str) -> None:
@@ -30,6 +30,28 @@ def _print_fix(lat: float, lon: float, fix_type: int) -> None:
     print(f"  Latitude : {lat:.6f}")
     print(f"  Longitude: {lon:.6f}")
     print(f"  Fix type : {fix_type}")
+
+
+def _maybe_print_gga_no_fix(diag: dict, last_print: float, interval_sec: float) -> float:
+    """Rate-limited line when GGA has no usable position (fix 0 or empty fields)."""
+    now = time.monotonic()
+    if now - last_print < interval_sec:
+        return last_print
+    fix = int(diag.get("fix", 0))
+    sats = int(diag.get("num_sats", 0))
+    has_coords = bool(diag.get("has_coords"))
+    if fix in (1, 2) and has_coords:
+        return last_print
+    reason = "no satellite fix yet"
+    if not has_coords:
+        reason = "empty lat/lon (receiver has no fix)"
+    elif fix == 0:
+        reason = "fix quality 0 (searching / no fix)"
+    print(
+        f"[STATUS] GGA: {reason}; fix={fix}, sats={sats}. "
+        "Move outdoors, check antenna, wait for cold start (can take several minutes)."
+    )
+    return now
 
 
 def _baud_candidates() -> list[int]:
@@ -128,6 +150,7 @@ def _stream_kernel(ser: object, duration_sec: float, baud: int) -> int:
     lines = 0
     fixes = 0
     last_fix: dict | None = None
+    last_gga_status_print = 0.0
     t_end = time.monotonic() + duration_sec
     buf = ""
     _print_header("GPS stream")
@@ -155,6 +178,12 @@ def _stream_kernel(ser: object, duration_sec: float, baud: int) -> int:
                     fixes += 1
                     last_fix = {"lat": parsed["lat"], "lon": parsed["lon"]}
                     _print_fix(parsed["lat"], parsed["lon"], int(parsed.get("fix", 0)))
+                else:
+                    diag = _parse_gpgga_diag(line)
+                    if diag:
+                        last_gga_status_print = _maybe_print_gga_no_fix(
+                            diag, last_gga_status_print, 4.0
+                        )
         else:
             time.sleep(0.02)
     try:
@@ -170,6 +199,11 @@ def _stream_kernel(ser: object, duration_sec: float, baud: int) -> int:
         print(f"Last longitude     : {last_fix['lon']:.6f}")
     else:
         print("Last coordinates   : none")
+    if fixes == 0:
+        print(
+            "Hint : $G*GSV with 0 satellites means no sky view or antenna issue; "
+            "lat/lon appear only after a 2D/3D fix (often outdoors, 1–15+ min cold start)."
+        )
     return 0
 
 
@@ -177,6 +211,7 @@ def _stream_pigpio(pi: object, baud: int, duration_sec: float) -> int:
     lines = 0
     fixes = 0
     last_fix: dict | None = None
+    last_gga_status_print = 0.0
     buf = ""
     t_end = time.monotonic() + duration_sec
     _print_header("GPS stream")
@@ -204,6 +239,12 @@ def _stream_pigpio(pi: object, baud: int, duration_sec: float) -> int:
                     fixes += 1
                     last_fix = {"lat": parsed["lat"], "lon": parsed["lon"]}
                     _print_fix(parsed["lat"], parsed["lon"], int(parsed.get("fix", 0)))
+                else:
+                    diag = _parse_gpgga_diag(line)
+                    if diag:
+                        last_gga_status_print = _maybe_print_gga_no_fix(
+                            diag, last_gga_status_print, 4.0
+                        )
         time.sleep(0.02)
     try:
         pi.bb_serial_read_close(GPS_RX_GPIO)  # type: ignore[attr-defined]
@@ -222,6 +263,11 @@ def _stream_pigpio(pi: object, baud: int, duration_sec: float) -> int:
         print(f"Last longitude     : {last_fix['lon']:.6f}")
     else:
         print("Last coordinates   : none")
+    if fixes == 0:
+        print(
+            "Hint : $G*GSV with 0 satellites means no sky view or antenna issue; "
+            "lat/lon appear only after a 2D/3D fix (often outdoors, 1–15+ min cold start)."
+        )
     return 0
 
 

@@ -47,6 +47,34 @@ def _parse_gpgga(line: str) -> dict | None:
         return None
 
 
+def _parse_gpgga_diag(line: str) -> dict | None:
+    """
+    Parse any *GGA sentence for fix quality and satellite count even when lat/lon are empty.
+
+    Used by gps_test to explain why coordinates are not printed (no fix yet).
+    """
+    if not line.startswith("$"):
+        return None
+    sentence_type = line.split(",", 1)[0].strip()
+    if not sentence_type.endswith("GGA"):
+        return None
+    parts = line.split(",")
+    if len(parts) < 10:
+        return None
+    try:
+        lat_raw = parts[2]
+        lon_raw = parts[4]
+        fix = int(parts[6]) if parts[6] else 0
+        num_sats = int(parts[7]) if parts[7] else 0
+        return {
+            "fix": fix,
+            "num_sats": num_sats,
+            "has_coords": bool(lat_raw and lon_raw),
+        }
+    except (ValueError, IndexError):
+        return None
+
+
 class GPSModule:
     """
     GPS module interface for obtaining coordinates.
