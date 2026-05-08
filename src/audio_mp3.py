@@ -142,6 +142,23 @@ class AudioMP3:
             self.open()
         self.send_command(0x03, param=max(1, int(track_num)), feedback=False)
 
+    def play_folder_track(self, folder_num: int, file_num: int) -> None:
+        """
+        Play file from folder using DFPlayer command 0x0F.
+
+        Example supported layout:
+            SD:/001/001.mp3
+            SD:/002/001.mp3
+        """
+        if self._dry_run:
+            return
+        if self._ser is None and self._pi is None:
+            self.open()
+        folder = max(1, min(99, int(folder_num)))
+        file_idx = max(1, min(255, int(file_num)))
+        param = ((folder & 0xFF) << 8) | (file_idx & 0xFF)
+        self.send_command(0x0F, param=param, feedback=False)
+
     def stop(self) -> None:
         """Stop playback. (DFPlayer command 0x16.)"""
         if self._dry_run:
@@ -171,6 +188,47 @@ class AudioMP3:
         """Query total file count in TF card (requires RX feedback wiring)."""
         resp = self.send_command(0x48, param=0, feedback=True, expected_cmd=0x48, timeout_sec=timeout_sec)
         return None if resp is None else int(resp["param"])
+
+    def query_folder_file_count(self, folder_num: int, timeout_sec: float = 0.6) -> int | None:
+        """Query file count in a specific folder (command 0x4E, requires RX feedback)."""
+        folder = max(1, min(99, int(folder_num)))
+        resp = self.send_command(
+            0x4E,
+            param=folder,
+            feedback=True,
+            expected_cmd=0x4E,
+            timeout_sec=timeout_sec,
+        )
+        return None if resp is None else int(resp["param"])
+
+    def wait_for_playback_end(
+        self,
+        timeout_sec: float,
+        poll_interval_sec: float = 0.2,
+    ) -> bool | None:
+        """
+        Wait until DFPlayer reports playback stopped.
+
+        Returns:
+            True  -> playback completion detected from status polling
+            False -> status polling worked, but timeout reached while still playing
+            None  -> feedback unavailable; cannot determine completion reliably
+        """
+        deadline = time.monotonic() + max(0.2, float(timeout_sec))
+        idle_streak = 0
+        while time.monotonic() < deadline:
+            status = self.query_status(timeout_sec=0.35)
+            if status is None:
+                return None
+            # Common DFPlayer behavior: 0 when stopped, non-zero when active.
+            if int(status) == 0:
+                idle_streak += 1
+                if idle_streak >= 2:
+                    return True
+            else:
+                idle_streak = 0
+            time.sleep(max(0.05, float(poll_interval_sec)))
+        return False
 
     def send_command(
         self,

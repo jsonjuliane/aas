@@ -23,7 +23,15 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.config import ACTION_COOLDOWN_SEC, COUNTDOWN_SECONDS, IMPACT_LOG_COOLDOWN_SEC
+from src.config import (
+    ACTION_COOLDOWN_SEC,
+    COUNTDOWN_SECONDS,
+    GPS_COLLISION_FIX_TIMEOUT_SEC,
+    IMPACT_LOG_COOLDOWN_SEC,
+    MP3_DEFAULT_FILE,
+    MP3_DEFAULT_FOLDER,
+    MP3_FOLDER_SCAN_MAX,
+)
 from src import (
     audio_mp3,
     buzzer_hw,
@@ -188,10 +196,38 @@ def _handle_alert(
 ) -> None:
     """Play countdown audio and log event for this phase."""
     ax, ay, az = sensor.read_g() if not dry_run else (0.0, 0.0, 0.0)
+    location = _resolve_collision_location(dry_run=dry_run)
+    folder_num, file_num, selection_reason = _select_countdown_audio(audio_mod=audio_mod, dry_run=dry_run)
 
-    # Play countdown audio
-    audio_mod.play_track(1)
-    print(f"Countdown window ({COUNTDOWN_SECONDS}s) audio played. Exiting run.")
+    # Play countdown audio from folder-based DFPlayer layout.
+    # Example: SD:/001/001.mp3 when folder=1 file=1.
+    audio_mod.play_folder_track(folder_num, file_num)
+    print(f"Countdown audio selected: {folder_num:03d}/{file_num:03d}.mp3 ({selection_reason})")
+    waited = audio_mod.wait_for_playback_end(timeout_sec=max(1.0, float(COUNTDOWN_SECONDS) + 20.0))
+    if waited is True:
+        print("Countdown audio completed (detected from DFPlayer status).")
+    elif waited is False:
+        print(
+            f"Countdown completion not detected before timeout; "
+            f"using fallback window {COUNTDOWN_SECONDS}s."
+        )
+        time.sleep(max(0.0, float(COUNTDOWN_SECONDS)))
+        audio_mod.stop()
+    else:
+        print(
+            f"DFPlayer feedback unavailable; using fallback window {COUNTDOWN_SECONDS}s "
+            "(wire DFPlayer TX->Pi RX for completion detection)."
+        )
+        time.sleep(max(0.0, float(COUNTDOWN_SECONDS)))
+        audio_mod.stop()
+    print("Countdown window complete. Exiting run.")
+    if location is not None:
+        print(
+            f"Collision location: {location['lat']:.6f}, {location['lon']:.6f} "
+            f"(fix timestamp {location['timestamp']})"
+        )
+    else:
+        print("Collision location: unavailable (no GPS fix during timeout).")
 
     logging_store.log_event(
         {
@@ -199,8 +235,63 @@ def _handle_alert(
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
             "accel_g": {"ax": ax, "ay": ay, "az": az},
             "countdown_seconds": COUNTDOWN_SECONDS,
+            "audio_selected": {
+                "folder": folder_num,
+                "file": file_num,
+                "reason": selection_reason,
+            },
+            "collision_location": location,
         }
     )
+
+
+def _resolve_collision_location(dry_run: bool) -> dict | None:
+    """Attempt GPS fix at collision time for logging."""
+    if dry_run:
+        return {
+            "lat": 0.0,
+            "lon": 0.0,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+            "source": "dry_run",
+        }
+    gps_mod = gps.GPSModule(dry_run=False)
+    try:
+        gps_mod.open()
+        fix = gps_mod.get_fix(timeout_sec=GPS_COLLISION_FIX_TIMEOUT_SEC)
+        if not fix:
+            return None
+        return {
+            "lat": float(fix["lat"]),
+            "lon": float(fix["lon"]),
+            "timestamp": str(fix.get("timestamp", "")),
+            "source": "gps",
+        }
+    except Exception:
+        return None
+    finally:
+        gps_mod.close()
+
+
+def _select_countdown_audio(audio_mod: audio_mp3.AudioMP3, dry_run: bool) -> tuple[int, int, str]:
+    """
+    Select countdown audio target.
+
+    Strategy:
+      1) If dry-run: use configured default.
+      2) If DFPlayer feedback is available, scan folder 1..MP3_FOLDER_SCAN_MAX and pick first with files.
+      3) Fallback to configured default when feedback is unavailable.
+    """
+    fallback = (int(MP3_DEFAULT_FOLDER), int(MP3_DEFAULT_FILE), "default config")
+    if dry_run:
+        return fallback
+    folder_upper = max(1, int(MP3_FOLDER_SCAN_MAX))
+    for folder in range(1, folder_upper + 1):
+        count = audio_mod.query_folder_file_count(folder, timeout_sec=0.45)
+        if count is None:
+            return (fallback[0], fallback[1], "feedback unavailable; fallback default")
+        if count > 0:
+            return (folder, 1, f"first non-empty folder found (files={count})")
+    return (fallback[0], fallback[1], "no non-empty folder found; fallback default")
 
 
 def _print_init_status(

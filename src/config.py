@@ -40,6 +40,12 @@ MP3_BAUD = 9600
 # None = use GPIO software UART (MP3_TX/RX_GPIO) in audio_mp3.py.
 # Set to /dev/ttyUSB* only if DFPlayer is physically on a USB-TTL adapter.
 MP3_SERIAL_PORT: str | None = None
+# Folder-based playback defaults for DFPlayer layout:
+# SD root/001/001.mp3 (countdown), SD root/002/001.mp3, etc.
+MP3_DEFAULT_FOLDER = 1
+MP3_DEFAULT_FILE = 1
+# Scan range used to find first non-empty folder via DFPlayer feedback.
+MP3_FOLDER_SCAN_MAX = 20
 
 # Buzzer (GPIO → resistor → transistor; typical NPN = HIGH = on, LOW = silent)
 BUZZER_GPIO = 18
@@ -59,6 +65,7 @@ TILT_DELTA_THRESHOLD_G = 1.5  # Baseline delta required to validate true collisi
 ACTION_COOLDOWN_SEC = 8.0  # Debounce action flow after a true collision
 IMPACT_LOG_COOLDOWN_SEC = 0.75  # Debounce impact candidate logs in main loop
 COUNTDOWN_SECONDS = 5
+GPS_COLLISION_FIX_TIMEOUT_SEC = 8.0
 
 # Paths (relative to project root)
 CONFIG_DIR = "config"
