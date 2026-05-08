@@ -15,7 +15,6 @@ For the phased plan, see `docs/PLAN.md`. **Prototype hardware** (BOM, pins, powe
 - **SIM800L** (GSM/SMS via hardware UART)
 - **GPS module** (UART via GPIO 20/21 software serial as currently planned)
 - **MP3 player module** (UART via GPIO 19/26 software serial as currently planned)
-- **Buzzer + transistor + 1kΩ resistor** (GPIO 18)
 - **Power**: 2×18650 (series) + charging board/BMS + buck converters (5V and ~4V) + LDO 3.3V for GPS (per wiring spec)
 
 ### Wiring
@@ -30,7 +29,6 @@ For the phased plan, see `docs/PLAN.md`. **Prototype hardware** (BOM, pins, powe
 | 8 | UART TXD0 | SIM800L | RXD |
 | 9 | GND | SIM800L | GND |
 | 10 | UART RXD0 | SIM800L | TXD |
-| 12 | GPIO18 | buzzer driver | 1kΩ → transistor base |
 | 14 | GND | MPU-6050 | GND |
 | 30 | GND | MP3 player | GND |
 | 35 | GPIO19 | MP3 player | TX |
@@ -40,16 +38,6 @@ For the phased plan, see `docs/PLAN.md`. **Prototype hardware** (BOM, pins, powe
 | 40 | GPIO21 | GPS | TX |
 
 **Important**: Use a **star ground** (common ground) across battery (-), both bucks, Pi ground, and all modules.
-
-### Buzzer squeals as soon as power is applied
-
-On the prototype harness, **GPIO 18 can float** until Linux and your app configure it. With a transistor-driven buzzer, that often reads as **always on**. After SmartShell starts, it **drives the buzzer line to the silent level** first. For a one-shot fix without running the full loop:
-
-```bash
-python -m src.buzzer_test --silence-only
-```
-
-If the buzzer **still** stays on, your driver may be **inverted**; in `src/config.py` set `BUZZER_ACTIVE_HIGH = False`. If it never turns on when you expect (Phase 4), revert or fix the schematic.
 
 ### Power notes (critical)
 
@@ -189,7 +177,7 @@ Edit `config/contacts.family.json` and add real emergency phone numbers (E.164 f
    - If using the venv: **Tools → Options → Interpreter** → choose **Alternative Python 3** → browse to `AccidentAlertSystem/.venv/bin/python3`.
 4. Press **F5** or **Run** to start.
 
-The app monitors the sensor. On validated impact (3–5g + tilt), it plays countdown audio (track 1), logs the event payload, then exits for this phase.
+The app monitors the sensor. On validated impact (3–5g + tilt), it plays countdown audio, logs the event payload, attempts GPS fix + GSM SMS alert, then exits for this phase.
 
 ### Run from Terminal
 
@@ -203,8 +191,6 @@ python -m src.hardware_check  # One-shot hardware probe (exit 1 if any FAIL)
 python -m src.gsm_test            # GSM: multi-baud AT, SIM, registration, signal
 python -m src.gps_test            # GPS: auto baud, NMEA stream, $GPGGA fixes
 python -m src.main --test-alert      # Force impact path: play countdown audio then exit (bench)
-python -m src.buzzer_test --silence-only  # Drive buzzer off, then exit (bring-up)
-python -m src.buzzer_test     # Buzzer ON briefly then OFF (bench)
 python -m src.audio_test --track 1  # Play DFPlayer track 1 (audio bench)
 python -m src.mpu_collision_test     # Isolated MPU tap/collision test (JSONL: collisions + summary by default)
 ```
@@ -237,7 +223,7 @@ Thonny and manual `python -m src.main` are for development. On the helmet, use *
 
 4. Follow logs: `journalctl -u smartshell.service -f`
 
-Full product hardening (watchdogs, incoming-SMS buzzer) stays in later phases; see `docs/PLAN.md`.
+Full product hardening (watchdogs, incoming-SMS responder loop) stays in later phases; see `docs/PLAN.md`.
 
 ---
 

@@ -29,8 +29,6 @@ python3 -m src.main --help
 python -m src.main --core-flow-only
 python -m src.main --core-flow-only --test-alert
 python -m src.main --dry-run
-python -m src.buzzer_test --silence-only
-python -m src.buzzer_test
 python -m src.audio_test --track 1
 python -m src.hardware_check
 python -m src.gsm_test
@@ -257,18 +255,6 @@ python -m src.hardware_check
 |--------|----------------|
 | `MP3_SERIAL_PORT` is `None` (default) | Breadboard mode — code sends DFPlayer commands via **pigpio** on GPIO19. Ensure `pigpiod` service is running. |
 | Want USB adapter instead | Set `MP3_SERIAL_PORT` to `/dev/ttyUSB*` and verify with `ls /dev/ttyUSB*`. |
-
----
-
-## Buzzer silent at boot (optional hardware bias)
-
-If GPIO 18 floats until software runs, add to `/boot/firmware/config.txt` or `/boot/config.txt`:
-
-```ini
-gpio=18=op,dl
-```
-
-Reboot. If buzzer stays on, try `gpio=18=op,dh` (inverted driver). Matches `BUZZER_ACTIVE_HIGH` in `src/config.py`.
 
 ---
 

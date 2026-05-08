@@ -47,10 +47,6 @@ MP3_DEFAULT_FILE = 1
 # Scan range used to find first non-empty folder via DFPlayer feedback.
 MP3_FOLDER_SCAN_MAX = 20
 
-# Buzzer (GPIO → resistor → transistor; typical NPN = HIGH = on, LOW = silent)
-BUZZER_GPIO = 18
-BUZZER_ACTIVE_HIGH = True  # False if your driver is inverted (swap silence level)
-
 # Optional cancel button (Phase 1 fallback)
 CANCEL_BUTTON_GPIO = 17  # Optional; add if you wire a cancel button
 

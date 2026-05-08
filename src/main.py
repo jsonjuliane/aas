@@ -34,7 +34,6 @@ from src.config import (
 )
 from src import (
     audio_mp3,
-    buzzer_hw,
     contacts,
     gps,
     gsm_sim800l,
@@ -66,7 +65,6 @@ def run(
 
     try:
         if not dry_run:
-            buzzer_hw.silence()
             sensor.calibrate()
         audio_mod.open()
         _print_init_status(
@@ -389,9 +387,6 @@ def _print_init_status(
 
 def _print_runtime_hardware_snapshot(audio_mod: audio_mp3.AudioMP3) -> None:
     """Print quick hardware-ready snapshot for runtime flow."""
-    buzzer_ok = buzzer_hw.silence()
-    print(f"[{'OK' if buzzer_ok else 'ERR':5}] Buzzer GPIO silent-state check")
-
     gsm = hardware_check.probe_gsm_readiness()
     gsm_ok = bool(gsm.get("ok_at"))
     gsm_sms_ready = bool(gsm.get("sms_ready"))

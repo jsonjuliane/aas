@@ -13,11 +13,10 @@
 | **Contacts** | `contacts.py` | — | Loads `config/contacts.family.json` (family SMS list + template). |
 | **Logging** | `logging_store.py` | — | Appends JSON lines under `logs/`. |
 | **Config** | `config.py` | Pin + path constants | Single place for GPIO, baud, serial device paths. |
-| **Buzzer GPIO** | `buzzer_hw.py` | Buzzer driver (GPIO 18) | At normal startup, drives line to **silent** so a floating pin does not hold the buzzer on. `python -m src.buzzer_test --silence-only` exits after silent; `python -m src.buzzer_test` turns ON then OFF for a bench check. |
 
 **Phase 2 (not in `src` yet):** barangay routing, geofence, `contacts.barangay.json` logic.
 
-**Phase 4 (not in `src` yet):** incoming SMS → buzzer patterns, watchdogs. **Boot autostart:** use `deploy/smartshell.service.example` + `README.md` now.
+**Phase 4 (not in `src` yet):** responder loop enhancements, watchdogs. **Boot autostart:** use `deploy/smartshell.service.example` + `README.md` now.
 
 ---
 
@@ -29,8 +28,6 @@
 4. **Serial paths:** **`GPS_SERIAL_PORT=None`** and **`MP3_SERIAL_PORT=None`** use pigpio GPIO software UART (GPS on GPIO20/21, MP3 TX on GPIO19). If using USB adapters, set to `/dev/ttyUSB*`. Do not point GPS and GSM at the same `ttyS0`.  
 5. **Cancel:** Wire a momentary switch to **GPIO 17** + GND or change `CANCEL_BUTTON_GPIO`.  
 6. **MP3:** SD card in DFPlayer with track `001`; USB-TTL path must match `MP3_SERIAL_PORT`.  
-7. **Buzzer:** If it screams at power-up until the app runs, use `python -m src.buzzer_test --silence-only` or flip `BUZZER_ACTIVE_HIGH` in `config.py` — see `README.md` / `docs/hardware.md`.
-
 Then run:
 
 ```bash
@@ -58,8 +55,6 @@ Expected: continuous monitoring; 3–5g candidates are logged with flags; valida
 - `--test-alert`: trigger impact action path immediately (countdown audio then exit). `--trigger` is a hidden alias.  
 - `--action-cooldown-sec`: debounce consecutive true-collision actions (default from config).  
 - `--impact-log-cooldown-sec`: debounce repeated 3–5g impact-window logs (default from config).  
-- `python -m src.buzzer_test --silence-only`: drive buzzer GPIO off and exit (bring-up).  
-- `python -m src.buzzer_test` / `--duration-sec`: buzzer ON for a short time then OFF (bench).  
 - `python -m src.audio_test --track 1`: play DFPlayer track 1; use `--probe-range N` to test track availability by ear.  
 - `python -m src.hardware_check`: full probe; **exit 1** if any `[FAIL]` line.  
 - `python -m src.gsm_test`: GSM diagnostics (baud sweep, SIM, signal); optional `--send-sms PHONE "msg"`.  

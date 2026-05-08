@@ -36,18 +36,11 @@ Use this checklist to prepare Raspberry Pi OS for the SmartShell hardware. Run t
 
 ## 3. Audio Output (MP3 countdown)
 
-Choose one:
+Use DFPlayer module output (speaker connected to DFPlayer, not Pi HDMI/USB audio).
 
-| Option | Notes |
-|--------|-------|
-| **USB sound card** | Plug in, set as default in `raspi-config` → System Options → Audio |
-| **I2S DAC** | Requires `dtparam=i2s=on` and overlay in `/boot/config.txt` |
-| **HDMI** | Not typical for helmet; use only for bench testing |
-
-Verify:
+Verify with:
 ```bash
-aplay -l
-# Play a test file if available
+python -m src.audio_test --track 1
 ```
 
 ---
@@ -73,7 +66,7 @@ pip install -r requirements.txt
 
 ## 5. GPIO Access
 
-GPIO (buzzer silence at boot, optional cancel button) requires either:
+GPIO (optional cancel button) requires either:
 
 - Running as `root`, or
 - Adding user to `gpio` group: `sudo usermod -aG gpio $USER` (then log out and back in)

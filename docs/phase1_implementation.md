@@ -16,7 +16,6 @@ This document describes the Phase 1 codebase and how to run it.
 | Contacts | `src/contacts.py` | Load family contacts, format message |
 | Logging | `src/logging_store.py` | `log_event()` |
 | Main | `src/main.py` | Entry point, main loop |
-| Buzzer GPIO | `src/buzzer_hw.py` | Silence at startup; `python -m src.buzzer_test --silence-only`; `python -m src.buzzer_test` (ON then OFF) |
 
 ---
 
@@ -30,8 +29,6 @@ This document describes the Phase 1 codebase and how to run it.
 | GSM isolated test | `python -m src.gsm_test` | Multi-baud AT, SIM/registration/signal; optional `--send-sms` |
 | GPS isolated test | `python -m src.gps_test` | Auto baud, NMEA stream, `$GPGGA` fixes (`--duration-sec`) |
 | Test alert | `python -m src.main --test-alert` | Trigger action path immediately (countdown audio then exit) |
-| Silence buzzer | `python -m src.buzzer_test --silence-only` | Drive GPIO off, exit (stuck buzzer at boot) |
-| Buzzer bench test | `python -m src.buzzer_test` | Buzzer ON briefly then OFF (`--duration-sec` for duration) |
 | Audio bench test | `python -m src.audio_test --track 1` | Play DFPlayer track 1; use `--probe-range N` to find audible tracks |
 | MPU isolated test | `python -m src.mpu_collision_test` | Tap/collision test; JSONL defaults to events + summary (`--log-all-samples` for verbose) |
 

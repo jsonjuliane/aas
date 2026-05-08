@@ -64,22 +64,7 @@ This document defines the module boundaries and public interfaces for the SmartS
 
 ---
 
-## 5. buzzer
-
-**Responsibility**: Sound buzzer (e.g. on incoming SMS from rescue center).
-
-**Phase 1 implementation**: `src/buzzer_hw.py` — `silence()` drives GPIO to the off state (floating-pin / stuck-on at boot). CLI: `python -m src.buzzer_test --silence-only`.
-
-| Function / Method | Signature | Returns | Notes |
-|------------------|-----------|---------|-------|
-| `beep(duration_sec: float)` | `(float) -> None` | — | Blocking beep (Phase 4) |
-| `beep_pattern(times: int, on_sec: float, off_sec: float)` | `(int, float, float) -> None` | — | Alert pattern (Phase 4) |
-
-**Dependencies**: `RPi.GPIO` (or equivalent), `src.config`
-
----
-
-## 6. cancel
+## 5. cancel
 
 **Responsibility**: Detect user cancellation during countdown (button or voice).
 
@@ -92,7 +77,7 @@ This document defines the module boundaries and public interfaces for the SmartS
 
 ---
 
-## 7. routing
+## 6. routing
 
 **Responsibility**: Determine alert recipients from GPS (Phase 2).
 
@@ -105,7 +90,7 @@ This document defines the module boundaries and public interfaces for the SmartS
 
 ---
 
-## 8. logging_store
+## 7. logging_store
 
 **Responsibility**: Persist event data (time, acceleration, location, routing).
 

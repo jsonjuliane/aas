@@ -1,6 +1,6 @@
 # SmartShell — Prototype hardware
 
-This document matches the **physical prototype** (breadboard / harness): Raspberry Pi Zero W with GSM, IMU, GPS, MP3 + speaker, buzzer, and battery-backed DC rails.
+This document matches the **physical prototype** (breadboard / harness): Raspberry Pi Zero W with GSM, IMU, GPS, MP3 + speaker, and battery-backed DC rails.
 
 ---
 
@@ -13,8 +13,7 @@ This document matches the **physical prototype** (breadboard / harness): Raspber
 | **GSM module** (e.g. SIM800L-class) | SMS over cellular; external antenna |
 | **GPS module** + **patch/ceramic antenna** | NMEA position (UART to Pi) |
 | **MP3 player module** (e.g. DFPlayer Mini) + **speaker** | Pre-recorded countdown / prompts (UART); **not** the Pi’s HDMI audio |
-| **Buzzer** | Alert tone (GPIO, typically via transistor + resistor) |
-| **DC–DC converters** (“buck” modules) | 5 V for Pi / MP3 / buzzer rail; ~4 V for GSM; optional 3.3 V LDO branch for GPS per design |
+| **DC–DC converters** (“buck” modules) | 5 V for Pi / MP3 rail; ~4 V for GSM; optional 3.3 V LDO branch for GPS per design |
 | **2× 18650** + **holder** + **charge/BMS** (if present) | Main battery power |
 
 ---
@@ -42,7 +41,6 @@ Same as `README.md` / `src/config.py`:
 | 8 | 14 | TXD0 | SIM800L RXD |
 | 9 | — | GND | SIM800L |
 | 10 | 15 | RXD0 | SIM800L TXD |
-| 12 | 18 | GPIO | Buzzer (via driver) |
 | 14 | — | GND | MPU-6050 |
 | 30 | — | GND | MP3 GND |
 | 35 | 19 | GPIO | MP3 TX (Pi → module RX) |
@@ -52,10 +50,6 @@ Same as `README.md` / `src/config.py`:
 | 40 | 21 | GPIO | GPS TX (Pi → module RX) |
 
 **Power:** Star ground; **100 µF** (or as designed) at SIM800L; GPS supply per LDO notes in `README.md`.
-
-**Buzzer at power-on:** Until the Pi drives **GPIO 18**, the pin may **float** and hold an NPN transistor **on**, so the buzzer can sound continuously. SmartShell calls `buzzer_hw.silence()` at startup; you can also run `python -m src.buzzer_test --silence-only`. If it stays on, try `BUZZER_ACTIVE_HIGH = False` in `src/config.py` (inverted driver).
-
----
 
 ## Do we need both GPS and GSM?
 

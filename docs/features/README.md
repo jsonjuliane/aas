@@ -8,7 +8,6 @@ Each document describes one feature: hardware and interface.
 | 02 | GPS location | [02_gps.md](02_gps.md) |
 | 03 | SIM800L GSM/SMS | [03_gsm_sim800l.md](03_gsm_sim800l.md) |
 | 04 | MP3 countdown audio | [04_audio_mp3.md](04_audio_mp3.md) |
-| 05 | Buzzer | [05_buzzer.md](05_buzzer.md) |
 | 06 | Cancel mechanism | [06_cancel.md](06_cancel.md) |
 | 07 | Location routing (Phase 2) | [07_routing.md](07_routing.md) |
 | 08 | Event logging | [08_logging.md](08_logging.md) |

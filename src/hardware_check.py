@@ -14,7 +14,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src import audio_mp3, buzzer_hw, cancel
+from src import audio_mp3, cancel
 from src.config import (
     CANCEL_BUTTON_GPIO,
     GPS_BAUD,
@@ -145,16 +145,6 @@ def run_hardware_check(dry_run: bool = False) -> int:
         )
     except ImportError:
         _emit("FAIL", "smbus2 not installed", "pip install smbus2 in your venv.")
-
-    # --- Buzzer GPIO ---
-    if buzzer_hw.silence():
-        print(f"[{'OK':5}] Buzzer GPIO driven to silent level")
-    else:
-        _emit(
-            "WARN",
-            "Buzzer GPIO not set (not a Pi or RPi.GPIO error)",
-            "Expected on non-Pi dev machines; on Pi, check gpio group and BUZZER_ACTIVE_HIGH.",
-        )
 
     # --- Cancel button GPIO init ---
     try:

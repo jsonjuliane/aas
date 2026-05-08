@@ -10,7 +10,7 @@ Build an IoT-based smart helmet system that:
 - Detects probable accidents using acceleration + orientation sensing
 - Plays a short voice countdown and allows **voice cancel** to prevent false alarms
 - Sends SMS alerts containing GPS location to designated contacts
-- Provides a way for responders (Barangay rescue center) to message back, triggering a buzzer
+- Provides a way for responders (Barangay rescue center) to message back for acknowledgment / workflow updates
 
 ---
 
@@ -21,7 +21,7 @@ Build an IoT-based smart helmet system that:
 3. **Cancel**: Listen for voice command “cancel” during the 5 seconds; if heard, stop alert and resume monitoring.
 4. **If not cancelled**: Obtain GPS coordinates and send SMS alerts via SIM800L.
 5. **Location routing**: If inside Biñan → **Family + Barangay (accident location) + Barangay (subject's home)**; if outside → **Family + Barangay (subject's home)**.
-6. **Incoming SMS buzzer**: Any incoming text from Barangay rescue center triggers buzzer.
+6. **Incoming SMS responder loop**: Process incoming responder texts for acknowledgment / workflow state.
 7. **Logging**: Store event data (timestamp, trigger values, location, routing decision).
 
 ---
@@ -38,7 +38,7 @@ Build an IoT-based smart helmet system that:
 - **Cancel window**: listen for “cancel”; if none, proceed
 - **Send alert**: SMS to registered contacts including GPS coordinates
 - **Log event**
-- **Buzzer**: sounds when any text is received from Barangay rescue center
+- **Responder loop**: processes incoming Barangay messages for workflow state
 
 ### B. False detection (cancelled)
 
@@ -55,7 +55,6 @@ Build an IoT-based smart helmet system that:
 - **GPS module**: coordinates (software serial on GPIO 20/21)
 - **SIM800L**: SMS alerts (hardware UART)
 - **MP3 player**: pre-recorded countdown audio (software serial on GPIO 19/26)
-- **Buzzer**: incoming SMS alert (GPIO 18 via transistor)
 
 ### Raspberry Pi Zero W pin mapping (current spec)
 
@@ -69,7 +68,6 @@ Build an IoT-based smart helmet system that:
 | Pin 8 | UART TX | SIM800L | RXD (hardware serial) |
 | Pin 9 | GND | SIM800L | Signal GND |
 | Pin 10 | UART RX | SIM800L | TXD (hardware serial) |
-| Pin 12 | GPIO 18 | Buzzer | 1kΩ → transistor base |
 | Pin 14 | GND | MPU-6050 | GND |
 | Pin 30 | GND | MP3 Player | GND |
 | Pin 35 | GPIO 19 | MP3 Player | TX (software serial) |
@@ -84,7 +82,7 @@ Build an IoT-based smart helmet system that:
 
 - **2x 18650 series** → charging board/BMS
 - **Main switch** between battery (+) and buck inputs
-- **Buck 1 (5V)** → Pi pin 2 (+), MP3 VCC, buzzer (+)
+- **Buck 1 (5V)** → Pi pin 2 (+), MP3 VCC
 - **Buck 2 (4V)** → SIM800L VCC with **100µF capacitor**
 - **LDO (3.3V)** from 5V buck → GPS VCC with **0.1µF (VIN) + 10µF (VOUT) capacitors**
 - **Star ground**: battery (-), all buck inputs (-), all modules’ grounds
@@ -95,12 +93,12 @@ Build an IoT-based smart helmet system that:
 
 The repo is a **runnable Phase 1 application** on Raspberry Pi OS when hardware and config match `README.md` / `docs/hardware.md`:
 
-- `requirements.txt` and `src/` with `main.py`, `buzzer_hw.py`, and supporting modules (sensor, GPS, GSM, audio, cancel, contacts, logging, `config.py`)
+- `requirements.txt` and `src/` with `main.py` and supporting modules (sensor, GPS, GSM, audio, cancel, contacts, logging, `config.py`)
 - Example contacts: `config/contacts.family.json.example` → copy to `config/contacts.family.json`
 - Run: `python -m src.main` (or open `src/main.py` in Thonny); `--dry-run` for no hardware; **`deploy/smartshell.service.example`** for boot autostart
 
 **Documented now:** example **`systemd`** unit → `deploy/smartshell.service.example` and `README.md` (boot autostart).  
-**Still planned (later phases):** barangay routing in code, voice cancel, incoming-SMS buzzer, watchdogs — see phases below.
+**Still planned (later phases):** barangay routing in code, voice cancel, responder loop hardening, watchdogs — see phases below.
 
 ---
 
@@ -150,13 +148,13 @@ The repo is a **runnable Phase 1 application** on Raspberry Pi OS when hardware 
   - `src/main.py` runnable in Thonny (Pi)
   - `config/contacts.family.json` (phone numbers + message template variables)
   - `assets/audio/` countdown audio file(s)
-  - Bench testing commands: `--test-alert` (full alert path), `python -m src.buzzer_test --silence-only` (GPIO buzzer off), `python -m src.hardware_check` (isolated connectivity report)
+  - Bench testing commands: `--test-alert` (full alert path), `python -m src.hardware_check` (isolated connectivity report)
   - “How to run on Pi with Thonny” + **systemd** boot autostart (`deploy/smartshell.service.example`, `README.md`)
 
 - **Not in scope (deferred)**
   - Barangay routing by geofence
   - Voice cancel in real helmet conditions
-  - Incoming SMS parsing + buzzer rules beyond “any SMS triggers”
+  - Incoming SMS parsing rules beyond baseline responder logging
 
 - **Exit criteria (demo)**
   - Simulated impact (or `--test-alert` / legacy `--trigger`) reliably starts countdown
@@ -231,7 +229,7 @@ Once Phase 1 is implemented, running is intentionally simple:
 **Goal**: reliable long-running device behavior and responder feedback loop.
 
 - **Scope**
-  - Incoming SMS monitoring from Barangay rescue center; buzzer signaling rules
+  - Incoming SMS monitoring from Barangay rescue center; acknowledgment/workflow rules
   - Process hardening beyond the baseline **`systemd`** example (watchdogs, resource limits, log rotation)
   - Watchdogs for GPS/GSM health, backoff/retry strategies
   - Power resilience (brownouts, SIM800L current spikes)
@@ -256,14 +254,13 @@ AccidentAlertSystem/
 ├── src/
 │   ├── main.py
 │   ├── config.py
-│   ├── buzzer_hw.py
 │   ├── sensor_mpu6050.py
 │   ├── gps.py
 │   ├── gsm_sim800l.py
 │   ├── audio_mp3.py
 │   ├── cancel.py
 │   ├── routing.py
-│   ├── buzzer.py          # (Phase 4 — SMS-driven patterns)
+│   ├── responder.py       # (Phase 4 — incoming SMS workflow handling)
 │   └── logging_store.py
 ├── config/
 │   ├── contacts.family.json
@@ -292,4 +289,4 @@ AccidentAlertSystem/
   - timestamp
   - coordinates (or explicit “GPS not available”)
   - routing decision (family only vs family+barangay once Phase 2 is complete)
-- **Incoming SMS**: any SMS from rescue center triggers buzzer (and is logged).
+- **Incoming SMS**: responder text handling is logged and tied to workflow state.
