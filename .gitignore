@@ -26,6 +26,4 @@ logs/
 # Secrets / sensitive config (use .example as template)
 .env
 .env.*
-config/contacts.family.json
-config/contacts.barangay.json
 

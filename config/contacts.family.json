@@ -1,0 +1,12 @@
+{
+  "_comment": "Copy to contacts.family.json and fill in real numbers. Do not commit contacts.family.json.",
+  "version": 1,
+  "contacts": [
+    {
+      "name": "Primary contact",
+      "phone": "09217679405",
+      "priority": 1
+    }
+  ],
+  "message_template": "ALERT: Possible accident. Rider may need help. Location: {lat}, {lon} at {timestamp}. Reply to confirm."
+}
