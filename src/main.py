@@ -35,7 +35,9 @@ from src.config import (
 from src import (
     audio_mp3,
     buzzer_hw,
+    contacts,
     gps,
+    gsm_sim800l,
     hardware_check,
     logging_store,
     sensor_mpu6050,
@@ -243,6 +245,7 @@ def _handle_alert(
             "collision_location": location,
         }
     )
+    _send_alert_sms(location=location, dry_run=dry_run)
 
 
 def _resolve_collision_location(dry_run: bool) -> dict | None:
@@ -292,6 +295,81 @@ def _select_countdown_audio(audio_mod: audio_mp3.AudioMP3, dry_run: bool) -> tup
         if count > 0:
             return (folder, 1, f"first non-empty folder found (files={count})")
     return (fallback[0], fallback[1], "no non-empty folder found; fallback default")
+
+
+def _send_alert_sms(location: dict | None, dry_run: bool) -> None:
+    """Send SMS alerts and log success/failure with reasons."""
+    try:
+        phones, template = contacts.load_family_contacts()
+    except Exception as e:
+        reason = f"contacts_load_failed:{e}"
+        print(f"GSM SMS skipped: {reason}")
+        logging_store.log_event(
+            {
+                "event": "sms_alert_failed",
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+                "reason": reason,
+            }
+        )
+        return
+
+    gsm_probe = hardware_check.probe_gsm_readiness()
+    if not dry_run and (not bool(gsm_probe.get("ok_at"))):
+        reason = f"gsm_not_ready:{gsm_probe.get('detail')}"
+        print(f"GSM SMS failed: {reason}")
+        logging_store.log_event(
+            {
+                "event": "sms_alert_failed",
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+                "reason": reason,
+                "gsm_probe": gsm_probe,
+            }
+        )
+        return
+
+    lat = float(location["lat"]) if location and location.get("lat") is not None else None
+    lon = float(location["lon"]) if location and location.get("lon") is not None else None
+    message = contacts.format_message(template=template, lat=lat, lon=lon)
+
+    modem = gsm_sim800l.GSMSIM800L(dry_run=dry_run)
+    sent = 0
+    failed: list[dict[str, str]] = []
+    try:
+        modem.open()
+        for phone in phones:
+            ok, reason = modem.send_sms_with_reason(phone=phone, text=message)
+            if ok:
+                sent += 1
+            else:
+                failed.append({"phone": phone, "reason": reason})
+    finally:
+        modem.close()
+
+    if sent > 0:
+        print(f"GSM SMS success: sent to {sent}/{len(phones)} contact(s).")
+        if failed:
+            print(f"GSM SMS partial failure details: {failed}")
+        logging_store.log_event(
+            {
+                "event": "sms_alert_sent",
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+                "sent_count": sent,
+                "total_contacts": len(phones),
+                "failed": failed,
+            }
+        )
+    else:
+        reason = failed[0]["reason"] if failed else "unknown_send_failure"
+        print(f"GSM SMS failed: no messages sent (reason: {reason})")
+        logging_store.log_event(
+            {
+                "event": "sms_alert_failed",
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+                "reason": reason,
+                "failed": failed,
+                "total_contacts": len(phones),
+            }
+        )
 
 
 def _print_init_status(

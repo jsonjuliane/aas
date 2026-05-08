@@ -87,25 +87,37 @@ class GSMSIM800L:
         Returns:
             True if sent successfully, False otherwise.
         """
+        ok, _ = self.send_sms_with_reason(phone, text)
+        return ok
+
+    def send_sms_with_reason(self, phone: str, text: str) -> tuple[bool, str]:
+        """
+        Send SMS and include a reason string for diagnostics.
+
+        Returns:
+            Tuple (ok, reason).
+        """
         if self._dry_run:
-            return True  # Pretend success for dry run
+            return True, "dry_run"
         if self._ser is None:
             self.open()
         if self._ser is None:
-            return False
+            return False, "serial_open_failed"
         try:
             r = send_at(self._ser, "AT+CMGF=1", timeout=2.0)
             if "OK" not in r:
-                return False
+                return False, "cmgf_failed"
             r = send_at(self._ser, f'AT+CMGS="{phone}"', timeout=3.0)
             if ">" not in r:
-                return False
+                return False, "cmgs_prompt_failed"
             time.sleep(0.2)
             self._ser.write((text + "\x1a").encode())
             r = send_at(self._ser, "", timeout=15.0)
-            return "OK" in r
-        except Exception:
-            return False
+            if "OK" in r:
+                return True, "ok"
+            return False, "send_not_acknowledged"
+        except Exception as e:
+            return False, f"exception:{e.__class__.__name__}"
 
     def check_signal(self) -> int:
         """
