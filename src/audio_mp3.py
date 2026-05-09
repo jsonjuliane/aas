@@ -10,7 +10,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from src.config import MP3_BAUD, MP3_RX_GPIO, MP3_SERIAL_PORT, MP3_TX_GPIO
+from src.config import MP3_BAUD, MP3_BUSY_GPIO, MP3_RX_GPIO, MP3_SERIAL_PORT, MP3_TX_GPIO
 
 
 def _dfplayer_checksum(data: list[int]) -> int:
@@ -74,6 +74,7 @@ class AudioMP3:
         self._pi: Any = None
         self._bb_rx_open = False
         self._rx_buf = bytearray()
+        self._busy_gpio = MP3_BUSY_GPIO
 
     def open(self) -> None:
         """Open MP3 transport (kernel serial or pigpio software UART)."""
@@ -106,6 +107,12 @@ class AudioMP3:
             self._bb_rx_open = True
         except Exception:
             self._bb_rx_open = False
+        if self._busy_gpio is not None:
+            try:
+                self._pi.set_mode(int(self._busy_gpio), pigpio.INPUT)  # type: ignore[name-defined]
+                self._pi.set_pull_up_down(int(self._busy_gpio), pigpio.PUD_UP)  # type: ignore[name-defined]
+            except Exception:
+                pass
 
     def close(self) -> None:
         """Close serial connection."""
@@ -229,6 +236,23 @@ class AudioMP3:
                 idle_streak = 0
             time.sleep(max(0.05, float(poll_interval_sec)))
         return False
+
+    def read_busy_state(self) -> str:
+        """
+        Read DFPlayer BUSY pin state when available.
+
+        Returns:
+            "playing" -> BUSY pin LOW (typical DFPlayer behavior)
+            "idle"    -> BUSY pin HIGH
+            "unknown" -> BUSY not wired or unreadable
+        """
+        if self._busy_gpio is None or self._pi is None:
+            return "unknown"
+        try:
+            level = int(self._pi.read(int(self._busy_gpio)))
+        except Exception:
+            return "unknown"
+        return "playing" if level == 0 else "idle"
 
     def send_command(
         self,

@@ -36,6 +36,9 @@ GPS_SERIAL_PORT: str | None = None
 # MP3 / DFPlayer (breadboard default: GPIO 19/26 via pigpio software UART)
 MP3_TX_GPIO = 19  # Pi TX → MP3 RX (when using software serial)
 MP3_RX_GPIO = 26  # Pi RX ← MP3 TX (via 1kΩ resistor)
+# Optional DFPlayer BUSY pin (LOW while playing, HIGH when idle).
+# Set to BCM pin number if wired (e.g. 16), else keep None.
+MP3_BUSY_GPIO: int | None = None
 MP3_BAUD = 9600
 # None = use GPIO software UART (MP3_TX/RX_GPIO) in audio_mp3.py.
 # Set to /dev/ttyUSB* only if DFPlayer is physically on a USB-TTL adapter.
