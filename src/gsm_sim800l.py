@@ -7,6 +7,7 @@ See docs/features/03_gsm_sim800l.md.
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -28,6 +29,17 @@ def send_at(ser: Any, cmd: str, timeout: float = 2.0) -> str:
 
 # Backward-compatible alias
 _send_at = send_at
+
+
+def _extract_cms_error_code(resp: str) -> int | None:
+    """Extract +CMS ERROR numeric code from modem response if present."""
+    m = re.search(r"\+CMS ERROR:\s*(\d+)", resp)
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except ValueError:
+        return None
 
 
 class GSMSIM800L:
@@ -97,27 +109,90 @@ class GSMSIM800L:
         Returns:
             Tuple (ok, reason).
         """
+        out = self.send_sms_detailed(phone, text)
+        return bool(out["ok"]), str(out["reason"])
+
+    def send_sms_detailed(self, phone: str, text: str) -> dict[str, Any]:
+        """
+        Send SMS and return detailed modem diagnostics.
+
+        Keys:
+            ok, reason, signal_strength, cmgs_response_raw,
+            final_submit_response_raw, cms_error_code
+        """
         if self._dry_run:
-            return True, "dry_run"
+            return {
+                "ok": True,
+                "reason": "dry_run",
+                "signal_strength": 99,
+                "cmgs_response_raw": "",
+                "final_submit_response_raw": "",
+                "cms_error_code": None,
+            }
         if self._ser is None:
             self.open()
         if self._ser is None:
-            return False, "serial_open_failed"
+            return {
+                "ok": False,
+                "reason": "serial_open_failed",
+                "signal_strength": 99,
+                "cmgs_response_raw": "",
+                "final_submit_response_raw": "",
+                "cms_error_code": None,
+            }
+        signal_strength = self.check_signal()
+        cmgs_response_raw = ""
+        final_submit_response_raw = ""
         try:
             r = send_at(self._ser, "AT+CMGF=1", timeout=2.0)
             if "OK" not in r:
-                return False, "cmgf_failed"
-            r = send_at(self._ser, f'AT+CMGS="{phone}"', timeout=3.0)
-            if ">" not in r:
-                return False, "cmgs_prompt_failed"
+                return {
+                    "ok": False,
+                    "reason": "cmgf_failed",
+                    "signal_strength": signal_strength,
+                    "cmgs_response_raw": "",
+                    "final_submit_response_raw": r,
+                    "cms_error_code": _extract_cms_error_code(r),
+                }
+            cmgs_response_raw = send_at(self._ser, f'AT+CMGS="{phone}"', timeout=3.0)
+            if ">" not in cmgs_response_raw:
+                return {
+                    "ok": False,
+                    "reason": "cmgs_prompt_failed",
+                    "signal_strength": signal_strength,
+                    "cmgs_response_raw": cmgs_response_raw,
+                    "final_submit_response_raw": "",
+                    "cms_error_code": _extract_cms_error_code(cmgs_response_raw),
+                }
             time.sleep(0.2)
             self._ser.write((text + "\x1a").encode())
-            r = send_at(self._ser, "", timeout=15.0)
-            if "OK" in r:
-                return True, "ok"
-            return False, "send_not_acknowledged"
+            final_submit_response_raw = send_at(self._ser, "", timeout=15.0)
+            if "OK" in final_submit_response_raw:
+                return {
+                    "ok": True,
+                    "reason": "ok",
+                    "signal_strength": signal_strength,
+                    "cmgs_response_raw": cmgs_response_raw,
+                    "final_submit_response_raw": final_submit_response_raw,
+                    "cms_error_code": _extract_cms_error_code(final_submit_response_raw),
+                }
+            return {
+                "ok": False,
+                "reason": "send_not_acknowledged",
+                "signal_strength": signal_strength,
+                "cmgs_response_raw": cmgs_response_raw,
+                "final_submit_response_raw": final_submit_response_raw,
+                "cms_error_code": _extract_cms_error_code(final_submit_response_raw),
+            }
         except Exception as e:
-            return False, f"exception:{e.__class__.__name__}"
+            return {
+                "ok": False,
+                "reason": f"exception:{e.__class__.__name__}",
+                "signal_strength": signal_strength,
+                "cmgs_response_raw": cmgs_response_raw,
+                "final_submit_response_raw": final_submit_response_raw,
+                "cms_error_code": _extract_cms_error_code(final_submit_response_raw),
+            }
 
     def check_signal(self) -> int:
         """

@@ -331,20 +331,31 @@ def _send_alert_sms(location: dict | None, dry_run: bool) -> None:
 
     modem = gsm_sim800l.GSMSIM800L(dry_run=dry_run)
     sent = 0
-    failed: list[dict[str, str]] = []
+    failed: list[dict[str, object]] = []
+    signal_snapshot = 99
     try:
         modem.open()
+        signal_snapshot = modem.check_signal()
         for phone in phones:
-            ok, reason = modem.send_sms_with_reason(phone=phone, text=message)
-            if ok:
+            send_out = modem.send_sms_detailed(phone=phone, text=message)
+            if bool(send_out["ok"]):
                 sent += 1
             else:
-                failed.append({"phone": phone, "reason": reason})
+                failed.append(
+                    {
+                        "phone": phone,
+                        "reason": str(send_out["reason"]),
+                        "signal_strength": int(send_out.get("signal_strength", 99)),
+                        "cmgs_response_raw": str(send_out.get("cmgs_response_raw", "")),
+                        "final_submit_response_raw": str(send_out.get("final_submit_response_raw", "")),
+                        "cms_error_code": send_out.get("cms_error_code"),
+                    }
+                )
     finally:
         modem.close()
 
     if sent > 0:
-        print(f"GSM SMS success: sent to {sent}/{len(phones)} contact(s).")
+        print(f"GSM SMS success: sent to {sent}/{len(phones)} contact(s), CSQ={signal_snapshot}.")
         if failed:
             print(f"GSM SMS partial failure details: {failed}")
         logging_store.log_event(
@@ -353,17 +364,24 @@ def _send_alert_sms(location: dict | None, dry_run: bool) -> None:
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
                 "sent_count": sent,
                 "total_contacts": len(phones),
+                "signal_strength": signal_snapshot,
                 "failed": failed,
             }
         )
     else:
-        reason = failed[0]["reason"] if failed else "unknown_send_failure"
-        print(f"GSM SMS failed: no messages sent (reason: {reason})")
+        reason = str(failed[0]["reason"]) if failed else "unknown_send_failure"
+        cms_code = failed[0].get("cms_error_code") if failed else None
+        print(
+            f"GSM SMS failed: no messages sent (reason: {reason}, "
+            f"CSQ={signal_snapshot}, cms_error_code={cms_code})"
+        )
         logging_store.log_event(
             {
                 "event": "sms_alert_failed",
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
                 "reason": reason,
+                "signal_strength": signal_snapshot,
+                "cms_error_code": cms_code,
                 "failed": failed,
                 "total_contacts": len(phones),
             }
