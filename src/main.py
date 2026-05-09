@@ -27,6 +27,11 @@ from src.config import (
     ACTION_COOLDOWN_SEC,
     COUNTDOWN_SECONDS,
     GPS_COLLISION_FIX_TIMEOUT_SEC,
+    GSM_MIN_CSQ_TO_SEND,
+    GSM_SEND_RETRY_BACKOFF_SEC,
+    GSM_SEND_RETRY_COUNT,
+    GSM_WAIT_POLL_SEC,
+    GSM_WAIT_REGISTER_SEC,
     IMPACT_LOG_COOLDOWN_SEC,
     MP3_DEFAULT_FILE,
     MP3_DEFAULT_FOLDER,
@@ -311,9 +316,9 @@ def _send_alert_sms(location: dict | None, dry_run: bool) -> None:
         )
         return
 
-    gsm_probe = hardware_check.probe_gsm_readiness()
+    gsm_probe = _wait_for_gsm_ready(dry_run=dry_run)
     if not dry_run and (not bool(gsm_probe.get("ok_at"))):
-        reason = f"gsm_not_ready:{gsm_probe.get('detail')}"
+        reason = f"gsm_not_ready_timeout:{gsm_probe.get('detail')}"
         print(f"GSM SMS failed: {reason}")
         logging_store.log_event(
             {
@@ -337,7 +342,7 @@ def _send_alert_sms(location: dict | None, dry_run: bool) -> None:
         modem.open()
         signal_snapshot = modem.check_signal()
         for phone in phones:
-            send_out = modem.send_sms_detailed(phone=phone, text=message)
+            send_out, attempts_used = _send_sms_with_retries(modem=modem, phone=phone, message=message)
             if bool(send_out["ok"]):
                 sent += 1
             else:
@@ -345,6 +350,7 @@ def _send_alert_sms(location: dict | None, dry_run: bool) -> None:
                     {
                         "phone": phone,
                         "reason": str(send_out["reason"]),
+                        "attempts_used": attempts_used,
                         "signal_strength": int(send_out.get("signal_strength", 99)),
                         "cmgs_response_raw": str(send_out.get("cmgs_response_raw", "")),
                         "final_submit_response_raw": str(send_out.get("final_submit_response_raw", "")),
@@ -365,6 +371,7 @@ def _send_alert_sms(location: dict | None, dry_run: bool) -> None:
                 "sent_count": sent,
                 "total_contacts": len(phones),
                 "signal_strength": signal_snapshot,
+                "gsm_probe": gsm_probe,
                 "failed": failed,
             }
         )
@@ -382,10 +389,79 @@ def _send_alert_sms(location: dict | None, dry_run: bool) -> None:
                 "reason": reason,
                 "signal_strength": signal_snapshot,
                 "cms_error_code": cms_code,
+                "gsm_probe": gsm_probe,
                 "failed": failed,
                 "total_contacts": len(phones),
             }
         )
+
+
+def _wait_for_gsm_ready(dry_run: bool) -> dict[str, object]:
+    """Wait up to configured timeout for GSM registration + usable signal."""
+    if dry_run:
+        return {
+            "ok_at": True,
+            "sms_ready": True,
+            "detail": "dry_run",
+            "csq": 99,
+        }
+    timeout_sec = max(1.0, float(GSM_WAIT_REGISTER_SEC))
+    poll_sec = max(0.2, float(GSM_WAIT_POLL_SEC))
+    t_end = time.monotonic() + timeout_sec
+    started = False
+    last_probe: dict[str, object] = {}
+    while time.monotonic() < t_end:
+        probe = hardware_check.probe_gsm_readiness()
+        last_probe = probe
+        ok_at = bool(probe.get("ok_at"))
+        csq = probe.get("csq")
+        try:
+            csq_val = int(csq) if csq is not None else 99
+        except (TypeError, ValueError):
+            csq_val = 99
+        if ok_at and bool(probe.get("network_registered")) and csq_val >= int(GSM_MIN_CSQ_TO_SEND):
+            print(f"GSM wait ready: NET=REGISTERED, CSQ={csq_val}.")
+            return probe
+        if not started:
+            print(
+                f"GSM wait: waiting up to {timeout_sec:.0f}s for registration and CSQ>={int(GSM_MIN_CSQ_TO_SEND)}..."
+            )
+            started = True
+        time.sleep(poll_sec)
+    return last_probe if last_probe else {"ok_at": False, "sms_ready": False, "detail": "gsm_wait_no_probe"}
+
+
+def _send_sms_with_retries(
+    modem: gsm_sim800l.GSMSIM800L,
+    phone: str,
+    message: str,
+) -> tuple[dict[str, object], int]:
+    """Send SMS with bounded retries and backoff."""
+    retries = max(1, int(GSM_SEND_RETRY_COUNT))
+    backoff = max(0.0, float(GSM_SEND_RETRY_BACKOFF_SEC))
+    last: dict[str, object] = {
+        "ok": False,
+        "reason": "no_attempt",
+        "signal_strength": 99,
+        "cmgs_response_raw": "",
+        "final_submit_response_raw": "",
+        "cms_error_code": None,
+    }
+    for idx in range(retries):
+        out = modem.send_sms_detailed(phone=phone, text=message)
+        last = {
+            "ok": bool(out.get("ok", False)),
+            "reason": str(out.get("reason", "unknown")),
+            "signal_strength": int(out.get("signal_strength", 99)),
+            "cmgs_response_raw": str(out.get("cmgs_response_raw", "")),
+            "final_submit_response_raw": str(out.get("final_submit_response_raw", "")),
+            "cms_error_code": out.get("cms_error_code"),
+        }
+        if bool(last["ok"]):
+            return last, idx + 1
+        if idx < (retries - 1):
+            time.sleep(backoff)
+    return last, retries
 
 
 def _print_init_status(
