@@ -7,6 +7,7 @@ See docs/features/04_audio_mp3.md.
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any
 
@@ -75,18 +76,16 @@ class AudioMP3:
         self._bb_rx_open = False
         self._rx_buf = bytearray()
         self._busy_gpio = MP3_BUSY_GPIO
+        self._active_serial_port: str | None = None
 
     def open(self) -> None:
         """Open MP3 transport (kernel serial or pigpio software UART)."""
         if self._dry_run:
             return
-        if self._port:
-            try:
-                import serial
-
-                self._ser = serial.Serial(self._port, MP3_BAUD, timeout=0.15)
-            except (ImportError, OSError):
-                self._ser = None
+        self._ser = None
+        self._pi = None
+        self._active_serial_port = None
+        if self._try_open_kernel_serial():
             return
         try:
             import pigpio
@@ -113,6 +112,33 @@ class AudioMP3:
                 self._pi.set_pull_up_down(int(self._busy_gpio), pigpio.PUD_UP)  # type: ignore[name-defined]
             except Exception:
                 pass
+
+    def _try_open_kernel_serial(self) -> bool:
+        """Try configured MP3 serial first, then /dev/ttyUSB0..3."""
+        try:
+            import serial
+        except ImportError:
+            return False
+
+        candidates: list[str] = []
+        if self._port:
+            candidates.append(str(self._port))
+        for idx in range(4):
+            dev = f"/dev/ttyUSB{idx}"
+            if dev not in candidates:
+                candidates.append(dev)
+
+        for dev in candidates:
+            if not os.path.exists(dev):
+                continue
+            try:
+                ser = serial.Serial(dev, MP3_BAUD, timeout=0.15)
+            except OSError:
+                continue
+            self._ser = ser
+            self._active_serial_port = dev
+            return True
+        return False
 
     def close(self) -> None:
         """Close serial connection."""
