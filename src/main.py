@@ -39,6 +39,7 @@ from src.config import (
 )
 from src import (
     audio_mp3,
+    cancel,
     contacts,
     gps,
     gsm_sim800l,
@@ -52,6 +53,9 @@ def run(
     dry_run: bool = False,
     core_flow_only: bool = False,
     test_alert_immediately: bool = False,
+    disable_sms_send: bool = False,
+    voice_cancel_keyword: str = "cancel",
+    voice_device_index: int | None = None,
     poll_interval_sec: float = 0.05,
     action_cooldown_sec: float = ACTION_COOLDOWN_SEC,
     impact_log_cooldown_sec: float = IMPACT_LOG_COOLDOWN_SEC,
@@ -71,6 +75,7 @@ def run(
     try:
         if not dry_run:
             sensor.calibrate()
+            cancel.init()
         audio_mod.open()
         _print_init_status(
             dry_run=dry_run,
@@ -97,6 +102,9 @@ def run(
                         sensor=sensor,
                         audio_mod=audio_mod,
                         dry_run=dry_run,
+                        disable_sms_send=disable_sms_send,
+                        voice_cancel_keyword=voice_cancel_keyword,
+                        voice_device_index=voice_device_index,
                     )
                 return
 
@@ -184,6 +192,9 @@ def run(
                         sensor=sensor,
                         audio_mod=audio_mod,
                         dry_run=dry_run,
+                        disable_sms_send=disable_sms_send,
+                        voice_cancel_keyword=voice_cancel_keyword,
+                        voice_device_index=voice_device_index,
                     )
                     return
             time.sleep(poll_interval_sec)
@@ -198,6 +209,9 @@ def _handle_alert(
     sensor: sensor_mpu6050.SensorMPU6050,
     audio_mod: audio_mp3.AudioMP3,
     dry_run: bool,
+    disable_sms_send: bool,
+    voice_cancel_keyword: str,
+    voice_device_index: int | None,
 ) -> None:
     """Play countdown audio and log event for this phase."""
     ax, ay, az = sensor.read_g() if not dry_run else (0.0, 0.0, 0.0)
@@ -208,23 +222,29 @@ def _handle_alert(
     # Example: SD:/001/001.mp3 when folder=1 file=1.
     audio_mod.play_folder_track(folder_num, file_num)
     print(f"Countdown audio selected: {folder_num:03d}/{file_num:03d}.mp3 ({selection_reason})")
-    waited = audio_mod.wait_for_playback_end(timeout_sec=max(1.0, float(COUNTDOWN_SECONDS) + 20.0))
-    if waited is True:
-        print("Countdown audio completed (detected from DFPlayer status).")
-    elif waited is False:
-        print(
-            f"Countdown completion not detected before timeout; "
-            f"using fallback window {COUNTDOWN_SECONDS}s."
+    cancelled, cancel_reason = _wait_for_cancel_window(
+        timeout_sec=max(0.5, float(COUNTDOWN_SECONDS)),
+        dry_run=dry_run,
+        audio_mod=audio_mod,
+        voice_cancel_keyword=voice_cancel_keyword,
+        voice_device_index=voice_device_index,
+    )
+    audio_mod.stop()
+    if cancelled:
+        print(f"Countdown cancelled ({cancel_reason}). SMS flow aborted.")
+        logging_store.log_event(
+            {
+                "event": "alert_cancelled",
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+                "reason": cancel_reason,
+                "audio_selected": {
+                    "folder": folder_num,
+                    "file": file_num,
+                    "reason": selection_reason,
+                },
+            }
         )
-        time.sleep(max(0.0, float(COUNTDOWN_SECONDS)))
-        audio_mod.stop()
-    else:
-        print(
-            f"DFPlayer feedback unavailable; using fallback window {COUNTDOWN_SECONDS}s "
-            "(wire DFPlayer TX->Pi RX for completion detection)."
-        )
-        time.sleep(max(0.0, float(COUNTDOWN_SECONDS)))
-        audio_mod.stop()
+        return
     print("Countdown window complete. Exiting run.")
     if location is not None:
         print(
@@ -248,7 +268,86 @@ def _handle_alert(
             "collision_location": location,
         }
     )
-    _send_alert_sms(location=location, dry_run=dry_run)
+    _send_alert_sms(location=location, dry_run=dry_run, disable_sms_send=disable_sms_send)
+
+
+def _wait_for_cancel_window(
+    timeout_sec: float,
+    dry_run: bool,
+    audio_mod: audio_mp3.AudioMP3,
+    voice_cancel_keyword: str,
+    voice_device_index: int | None,
+) -> tuple[bool, str]:
+    """
+    Wait through countdown window and check cancellation sources.
+
+    Returns:
+        (cancelled, reason)
+    """
+    timeout_sec = max(0.2, float(timeout_sec))
+    t_start = time.monotonic()
+    t_fallback_end = t_start + timeout_sec
+    # Safety cap to avoid hanging forever if module status gets stuck as "playing".
+    t_hard_end = t_start + max(timeout_sec + 120.0, timeout_sec * 4.0)
+    keyword = voice_cancel_keyword.strip().lower() or "cancel"
+    recognizer = None
+    mic = None
+    voice_available = False
+    playback_feedback_known = False
+    playback_done = False
+    if not dry_run:
+        try:
+            import speech_recognition as sr
+
+            recognizer = sr.Recognizer()
+            mic = sr.Microphone(device_index=voice_device_index)
+            voice_available = True
+            print(f"Voice cancel enabled (keyword='{keyword}').")
+        except Exception as e:
+            print(f"Voice cancel unavailable: {e}")
+
+    while time.monotonic() < t_hard_end:
+        # GPIO/button cancel path
+        if cancel.wait_for_cancel(timeout_sec=0.05, dry_run=dry_run):
+            return True, "button_cancel"
+
+        # Optional voice-cancel path
+        if voice_available and recognizer is not None and mic is not None:
+            remaining = t_hard_end - time.monotonic()
+            if remaining <= 0:
+                break
+            chunk = min(1.0, max(0.2, remaining))
+            try:
+                with mic as source:
+                    audio = recognizer.listen(source, timeout=chunk, phrase_time_limit=chunk)
+                heard = recognizer.recognize_google(audio).strip().lower()
+                if keyword in heard:
+                    return True, "voice_cancel"
+            except Exception:
+                # Ignore transient audio/recognition errors during window.
+                pass
+
+        # Keep checking whether playback already ended when serial feedback exists.
+        waited = audio_mod.wait_for_playback_end(timeout_sec=0.05, poll_interval_sec=0.05)
+        if waited is True:
+            playback_feedback_known = True
+            playback_done = True
+        elif waited is False:
+            playback_feedback_known = True
+            playback_done = False
+
+        now = time.monotonic()
+        # Preferred behavior:
+        # - If playback status feedback is available, use actual MP3 duration (end when playback ends).
+        # - If feedback is unavailable, fall back to configured timeout window.
+        if playback_feedback_known:
+            if playback_done:
+                return False, "audio_finished"
+        elif now >= t_fallback_end:
+            return False, "timeout_fallback"
+        time.sleep(0.05)
+
+    return False, "timeout_hard_cap"
 
 
 def _resolve_collision_location(dry_run: bool) -> dict | None:
@@ -300,8 +399,19 @@ def _select_countdown_audio(audio_mod: audio_mp3.AudioMP3, dry_run: bool) -> tup
     return (fallback[0], fallback[1], "no non-empty folder found; fallback default")
 
 
-def _send_alert_sms(location: dict | None, dry_run: bool) -> None:
+def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool) -> None:
     """Send SMS alerts and log success/failure with reasons."""
+    if disable_sms_send:
+        msg = "sms should have been sent, currently disabled for testing voice cancellation"
+        print(f"GSM SMS disabled: {msg}")
+        logging_store.log_event(
+            {
+                "event": "sms_alert_disabled",
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+                "reason": msg,
+            }
+        )
+        return
     try:
         phones, template = contacts.load_family_contacts()
     except Exception as e:
@@ -544,6 +654,23 @@ def main() -> int:
         help="Run one full alert cycle immediately (countdown, cancel window, SMS path)",
     )
     ap.add_argument(
+        "--disable-sms-send",
+        action="store_true",
+        help="Do not send real SMS; log that SMS is intentionally disabled",
+    )
+    ap.add_argument(
+        "--voice-cancel-keyword",
+        type=str,
+        default="cancel",
+        help="Keyword used by microphone cancellation during countdown (default: cancel)",
+    )
+    ap.add_argument(
+        "--voice-device-index",
+        type=int,
+        default=None,
+        help="Optional microphone device index for SpeechRecognition",
+    )
+    ap.add_argument(
         "--trigger",
         action="store_true",
         help=argparse.SUPPRESS,
@@ -566,6 +693,9 @@ def main() -> int:
         dry_run=args.dry_run,
         core_flow_only=args.core_flow_only,
         test_alert_immediately=test_now,
+        disable_sms_send=bool(args.disable_sms_send),
+        voice_cancel_keyword=str(args.voice_cancel_keyword),
+        voice_device_index=args.voice_device_index,
         action_cooldown_sec=args.action_cooldown_sec,
         impact_log_cooldown_sec=args.impact_log_cooldown_sec,
     )

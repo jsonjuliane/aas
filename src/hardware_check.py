@@ -162,6 +162,9 @@ def run_hardware_check(dry_run: bool = False) -> int:
     # --- MP3 serial ---
     _check_mp3_serial()
 
+    # --- Voice-cancel microphone availability ---
+    _check_voice_cancel_hardware()
+
     # --- /dev/serial0 target (info) ---
     if os.path.exists("/dev/serial0"):
         try:
@@ -549,6 +552,51 @@ def _check_mp3_serial() -> None:
         print(f"[{'OK':5}] MP3 transport ready ({using} @ {MP3_BAUD})")
     finally:
         mp3_mod.close()
+
+
+def _check_voice_cancel_hardware() -> None:
+    """Check microphone availability for voice cancellation."""
+    try:
+        import speech_recognition as sr
+    except ImportError:
+        _emit(
+            "WARN",
+            "Voice cancel check unavailable: SpeechRecognition not installed",
+            "Install dependencies with pip install -r requirements.txt",
+        )
+        return
+
+    try:
+        mic_names = sr.Microphone.list_microphone_names()
+    except Exception as e:
+        _emit(
+            "WARN",
+            f"Voice cancel mic enumeration failed: {e}",
+            "Check PyAudio installation and USB sound adapter detection.",
+        )
+        return
+
+    if not mic_names:
+        _emit(
+            "WARN",
+            "No microphone input devices detected for voice cancel",
+            "Attach USB sound dongle + lav mic, then verify with arecord -l.",
+        )
+        return
+
+    try:
+        with sr.Microphone() as _:
+            pass
+    except Exception as e:
+        _emit(
+            "WARN",
+            f"Microphone detected but open failed: {e}",
+            "Try explicit device index in main with --voice-device-index.",
+        )
+        return
+
+    default_name = mic_names[0]
+    print(f"[{'OK':5}] Voice cancel mic available ({len(mic_names)} device(s); default: {default_name})")
 
 
 def main() -> int:
