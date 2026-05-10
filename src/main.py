@@ -295,6 +295,8 @@ def _wait_for_cancel_window(
     voice_available = False
     playback_feedback_known = False
     playback_done = False
+    last_reported_sec = -1
+    announced_audio_mode = False
     if not dry_run:
         try:
             import speech_recognition as sr
@@ -337,6 +339,15 @@ def _wait_for_cancel_window(
             playback_done = False
 
         now = time.monotonic()
+        if playback_feedback_known:
+            if not announced_audio_mode:
+                print("Cancel window follows actual MP3 playback duration (say 'cancel' any time while audio is playing).")
+                announced_audio_mode = True
+        else:
+            remaining_sec = max(0, int(t_fallback_end - now + 0.999))
+            if remaining_sec != last_reported_sec:
+                last_reported_sec = remaining_sec
+                print(f"Cancel window (fallback): {remaining_sec}s remaining...")
         # Preferred behavior:
         # - If playback status feedback is available, use actual MP3 duration (end when playback ends).
         # - If feedback is unavailable, fall back to configured timeout window.
