@@ -93,6 +93,19 @@ class VoiceCancelContext:
     selected_device_index: int | None = None
 
 
+def _voice_cancel_capabilities_payload(ctx: VoiceCancelContext) -> dict[str, object]:
+    """Structured mic paths for JSON logs."""
+    return {
+        "mic_device_index": ctx.selected_device_index,
+        "sound_level_cancel": bool(ctx.sound_ok),
+        "keyword_cancel_configured": bool(VOICE_CANCEL_KEYWORD_ENABLED),
+        "keyword_cancel_ready": bool(ctx.speech_ok),
+        "any_mic_active": bool(
+            ctx.sound_ok or (VOICE_CANCEL_KEYWORD_ENABLED and ctx.speech_ok)
+        ),
+    }
+
+
 def _close_voice_cancel_context(ctx: VoiceCancelContext) -> None:
     if ctx.stream is not None:
         try:
@@ -107,6 +120,34 @@ def _close_voice_cancel_context(ctx: VoiceCancelContext) -> None:
         except Exception:
             pass
         ctx.pa = None
+
+
+def _log_mic_cancel_closed(
+    ctx: VoiceCancelContext,
+    *,
+    dry_run: bool,
+    cancelled: bool,
+    cancel_reason: str,
+) -> None:
+    """JSONL + console after countdown window ends (before resources are released)."""
+    if dry_run:
+        return
+    ts = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+    caps = _voice_cancel_capabilities_payload(ctx)
+    logging_store.log_event(
+        {
+            "event": "mic_cancel_closed",
+            "timestamp": ts,
+            "cancelled": cancelled,
+            "cancel_reason": cancel_reason,
+            **caps,
+        }
+    )
+    active = bool(caps.get("any_mic_active"))
+    print(
+        f"[Mic] Closed after countdown (cancelled={cancelled}, reason={cancel_reason!r}, "
+        f"had_mic_path={active})."
+    )
 
 
 def _prepare_voice_cancel(
@@ -376,6 +417,28 @@ def _handle_alert(
     track_num, selection_reason = _select_countdown_audio(audio_mod=audio_mod, dry_run=dry_run)
 
     voice_ctx = _prepare_voice_cancel(dry_run, voice_cancel_keyword, voice_device_index)
+    if not dry_run:
+        caps = _voice_cancel_capabilities_payload(voice_ctx)
+        ts_mic = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+        logging_store.log_event(
+            {
+                "event": "mic_cancel_ready",
+                "timestamp": ts_mic,
+                **caps,
+            }
+        )
+        if caps.get("any_mic_active"):
+            print(
+                f"[Mic] Ready — device_index={voice_ctx.selected_device_index}, "
+                f"sound_level={caps.get('sound_level_cancel')}, "
+                f"keyword_path={caps.get('keyword_cancel_ready') and VOICE_CANCEL_KEYWORD_ENABLED}."
+            )
+        else:
+            print("[Mic] No microphone cancel path active for this alert (button cancel only).")
+
+    cancelled = False
+    cancel_reason = "before_cancel_window"
+    play_status: dict = {}
     try:
         # DFPlayer layout: SD:/mp3/0001.mp3 etc.; command 0x03 (see mp3_play_command log).
         play_status = audio_mod.play_track_with_status(track_num)
@@ -417,6 +480,12 @@ def _handle_alert(
             voice_ctx=voice_ctx,
         )
     finally:
+        _log_mic_cancel_closed(
+            voice_ctx,
+            dry_run=dry_run,
+            cancelled=cancelled,
+            cancel_reason=cancel_reason,
+        )
         _close_voice_cancel_context(voice_ctx)
     audio_mod.stop()
     if cancelled:
@@ -520,6 +589,30 @@ def _wait_for_cancel_window(
 
     tick_thread = threading.Thread(target=_fallback_second_ticker, daemon=True)
     tick_thread.start()
+
+    if not dry_run:
+        caps_listen = _voice_cancel_capabilities_payload(voice_ctx)
+        ts_listen = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+        logging_store.log_event(
+            {
+                "event": "mic_cancel_listening",
+                "timestamp": ts_listen,
+                "cancel_window_timeout_sec": timeout_sec,
+                **caps_listen,
+            }
+        )
+        if caps_listen.get("any_mic_active"):
+            listen_parts: list[str] = []
+            if voice_ctx.sound_ok:
+                listen_parts.append("sound-level")
+            if VOICE_CANCEL_KEYWORD_ENABLED and voice_ctx.speech_ok:
+                listen_parts.append("keyword")
+            print(
+                f"[Mic] Listening during cancel window "
+                f"({' + '.join(listen_parts)}); device_index={voice_ctx.selected_device_index}"
+            )
+        else:
+            print("[Mic] Cancel window active — microphone paths inactive (button cancel only).")
 
     try:
         while time.monotonic() < t_hard_end:
