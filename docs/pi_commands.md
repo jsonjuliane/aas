@@ -41,7 +41,8 @@ python -m src.main
 - **`python -m src.hardware_check`**: one-shot I2C / GPIO / GSM (multi-baud AT + SIM/signal if OK) / GPS / MP3 probes. Exit code **1** if any line is **`[FAIL]`**, else **0**. **WARN / SKIP / FAIL / INFO** lines include indented **causes**; the same entries are appended to **`logs/hardware_check.log`** on the Pi (folder is gitignored).
 - **`python -m src.gsm_test`**: deeper GSM bench (baud sweep, `AT+CPIN?`, `AT+CREG?`, `AT+CSQ`, `AT+COPS?`). Optional: `--send-sms PHONE "message"`.
 - **`python -m src.gps_test`**: auto-detect baud, stream NMEA for `--duration-sec` (default 30), print `$GPGGA` fixes.
-- **`python -m src.audio_test --track 1`**: play DFPlayer track 1 (audio bench). Use `--probe-range N` to test multiple tracks.
+- **`python -m src.audio_test --track 1`**: play DFPlayer track 1 (`mp3/0001.mp3` layout). Use `--probe-range N` to test multiple tracks.
+- **`python -m src.mp3_diag`**: full **MP3-TF-16P** bench (reset 0x0C, TF select, volume, queries, `play_track`, optional `01/001` fallback). Same as `python -m src.audio_test --mp3tf16p-diag`.
 - **`python -m src.mpu_collision_test`**: isolated MPU tap/collision JSONL test (see `--help`).
 - Startup prints sensor/audio init status for the current phase flow.
 

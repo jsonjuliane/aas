@@ -45,9 +45,12 @@ On the DFPlayer microSD, use a folder named **`mp3`** at the card root with file
 ```bash
 python -m src.audio_test --track 1
 python -m src.audio_test --probe-range 5 --track-sec 3
+python -m src.mp3_diag
 ```
 
-Because most bench wiring is TX-only to DFPlayer, the script confirms playback by audible output (speaker), not by reading a file list from the module.
+`mp3_diag` runs reset (0x0C), TF select (0x09), volume, queries, `play_track`, stop, and an optional `01/001` folder play. There is no standard serial “LED on” command on these boards.
+
+Because TX-only wiring is common, use the speaker for confirmation when RX is unwired.
 
 ## References
 

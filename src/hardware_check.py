@@ -584,7 +584,8 @@ def _check_mp3_serial() -> None:
                 "WARN",
                 "MP3 DFPlayer RX feedback not detected (playback may still work one-way)",
                 f"Wire DFPlayer TX → Pi RX (BCM GPIO {MP3_RX_GPIO}, physical pin 37). "
-                "Use a series resistor if module TX is 5 V. Requires pigpio RX or USB-TTL RX path.",
+                "Use a series resistor if module TX is 5 V. Requires pigpio RX or USB-TTL RX path. "
+                "For a full play/reset/query bench run: python -m src.mp3_diag",
             )
     finally:
         mp3_mod.close()

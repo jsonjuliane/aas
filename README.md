@@ -192,7 +192,8 @@ python -m src.hardware_check  # One-shot hardware probe (exit 1 if any FAIL)
 python -m src.gsm_test            # GSM: multi-baud AT, SIM, registration, signal
 python -m src.gps_test            # GPS: auto baud, NMEA stream, $GPGGA fixes
 python -m src.main --test-alert      # Force impact path: play countdown audio then exit (bench)
-python -m src.audio_test --track 1  # Play DFPlayer track 1 (audio bench)
+python -m src.audio_test --track 1  # Play DFPlayer track 1 (mp3/0001.mp3 layout)
+python -m src.mp3_diag             # Full MP3-TF-16P diagnostic (reset, play, queries)
 python -m src.mpu_collision_test     # Isolated MPU tap/collision test (JSONL: collisions + summary by default)
 ```
 

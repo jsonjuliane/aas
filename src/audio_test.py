@@ -4,6 +4,7 @@ Isolated DFPlayer audio bench test.
 Run on Raspberry Pi:
     python -m src.audio_test --track 1
     python -m src.audio_test --probe-range 5 --track-sec 3
+    python -m src.mp3_diag              # full MP3-TF-16P diagnostic (or --mp3tf16p-diag)
 """
 
 from __future__ import annotations
@@ -126,68 +127,6 @@ def _probe_range(max_track: int, hold_sec: float, volume: int | None, query: boo
         mod.close()
 
 
-def _mp3tf16p_diag(
-    hold_sec: float,
-    volume: int | None,
-    folder: int,
-    file_num: int,
-) -> int:
-    """Run focused MP3-TF-16P diagnostics (transport, feedback, BUSY, and playback)."""
-    mod = audio_mp3.AudioMP3(dry_run=False)
-    mod.open()
-    try:
-        if mod._ser is None and mod._pi is None:
-            print("[FAIL] MP3 transport is not open (check wiring / pigpio / serial config).")
-            return 1
-
-        print("[INFO] MP3-TF-16P diagnostic")
-        print("       LED note: onboard LED behavior varies by clone; use serial/BUSY as source of truth.")
-        if volume is not None:
-            mod.set_volume(volume)
-            print(f"[INFO] Volume set to {max(0, min(30, int(volume)))}")
-            time.sleep(0.1)
-
-        status_before = mod.query_status(timeout_sec=0.6)
-        tf_count = mod.query_tf_file_count(timeout_sec=0.6)
-        folder_count = mod.query_folder_file_count(folder, timeout_sec=0.6)
-        busy_before = mod.read_busy_state()
-        print(f"[INFO] Status(before): {status_before if status_before is not None else 'n/a'}")
-        print(f"[INFO] TF file count : {tf_count if tf_count is not None else 'n/a'}")
-        print(f"[INFO] Folder {folder:03d} count: {folder_count if folder_count is not None else 'n/a'}")
-        print(f"[INFO] BUSY pin(before): {busy_before}")
-        if tf_count is None:
-            print("[WARN] No serial feedback. Wire DFPlayer TX -> Pi RX for status/file queries.")
-        if busy_before == "unknown":
-            print("[WARN] BUSY pin not readable. Wire DFPlayer BUSY -> MP3_BUSY_GPIO and set config.")
-
-        print(f"[INFO] Sending play command for {folder:03d}/{file_num:03d}...")
-        mod.play_folder_track(folder, file_num)
-        time.sleep(max(0.2, hold_sec))
-
-        status_mid = mod.query_status(timeout_sec=0.6)
-        busy_mid = mod.read_busy_state()
-        print(f"[INFO] Status(during): {status_mid if status_mid is not None else 'n/a'}")
-        print(f"[INFO] BUSY pin(during): {busy_mid}")
-
-        waited = mod.wait_for_playback_end(timeout_sec=max(hold_sec + 8.0, 12.0))
-        status_after = mod.query_status(timeout_sec=0.6)
-        busy_after = mod.read_busy_state()
-        if waited is True:
-            print("[OK] Playback completion detected by serial status.")
-        elif waited is False:
-            print("[WARN] Playback did not report completion before timeout.")
-        else:
-            print("[WARN] Could not detect completion via serial status (no feedback).")
-        print(f"[INFO] Status(after): {status_after if status_after is not None else 'n/a'}")
-        print(f"[INFO] BUSY pin(after): {busy_after}")
-
-        mod.stop()
-        print("[DONE] MP3-TF-16P diagnostic complete.")
-        return 0
-    finally:
-        mod.close()
-
-
 def main() -> int:
     ap = argparse.ArgumentParser(description="Isolated DFPlayer audio bench test")
     ap.add_argument(
@@ -245,7 +184,7 @@ def main() -> int:
     ap.add_argument(
         "--mp3tf16p-diag",
         action="store_true",
-        help="Run focused MP3-TF-16P diagnostics: feedback, BUSY state, and playback completion",
+        help="Run full MP3-TF-16P diagnostic (same as python -m src.mp3_diag): reset, TF select, queries, play",
     )
     args = ap.parse_args()
 
@@ -256,12 +195,17 @@ def main() -> int:
     if args.sd_dir:
         _list_sd_files(args.sd_dir)
     if args.mp3tf16p_diag:
-        diag_folder = folder if folder is not None else 1
-        return _mp3tf16p_diag(
+        from src.mp3_diag import run_diag_session
+
+        diag_folder = int(args.folder) if int(args.folder) > 0 else 1
+        return run_diag_session(
             hold_sec=hold_sec,
             volume=volume,
+            track=max(1, int(args.track)),
             folder=diag_folder,
-            file_num=file_num,
+            file_num=max(1, int(args.file)),
+            no_reset=False,
+            try_folder_layout=True,
         )
     if args.probe_range and args.probe_range > 0:
         return _probe_range(

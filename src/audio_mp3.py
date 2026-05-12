@@ -334,6 +334,45 @@ class AudioMP3:
             return "unknown"
         return "playing" if level == 0 else "idle"
 
+    def send_raw_command(self, command: int, param: int = 0) -> tuple[bool, str]:
+        """
+        Send one DFPlayer frame without requesting feedback byte in the packet.
+
+        Use for simple control commands (reset, source select, etc.).
+        """
+        if self._dry_run:
+            return True, "dry_run"
+        if self._ser is None and self._pi is None:
+            self.open()
+        if self._ser is None and self._pi is None:
+            return False, "transport_not_open"
+        packet = _dfplayer_packet(
+            command=command & 0xFF,
+            param=param & 0xFFFF,
+            feedback=0,
+        )
+        return self._write_packet_result(packet)
+
+    def dfplayer_module_reset(self) -> tuple[bool, str]:
+        """
+        Module reset (command 0x0C, param 0) — DFRobot-style DFPlayer Mini.
+
+        Wait ~1–2 s after success before other commands. Clones may differ.
+        """
+        return self.send_raw_command(0x0C, 0)
+
+    def dfplayer_select_tf_card(self) -> tuple[bool, str]:
+        """
+        Select TF/SD card as playback device (command 0x09, param 2).
+
+        Typical DFRobot mapping: 1=USB, 2=TF. Some MP3-TF-16P boards only support TF.
+        """
+        return self.send_raw_command(0x09, 2)
+
+    def dfplayer_wake_up(self) -> tuple[bool, str]:
+        """Wake from sleep (0x0B, param 0) on modules that support sleep."""
+        return self.send_raw_command(0x0B, 0)
+
     def send_command(
         self,
         command: int,
