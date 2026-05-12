@@ -177,11 +177,57 @@ class AudioMP3:
         With the standard **mp3/** folder on the SD card, files should be named
         ``0001.mp3``, ``0002.mp3``, …; track ``1`` plays ``mp3/0001.mp3``.
         """
+        self.play_track_with_status(track_num)
+
+    def play_track_with_status(self, track_num: int) -> dict[str, Any]:
+        """
+        Send play command (0x03) and report whether bytes were written to the transport.
+
+        Note: ``ok`` means the UART write / pigpio wave completed — not that the
+        module decoded audio (use RX feedback or ear check for that).
+        """
+        track = max(1, min(255, int(track_num)))
         if self._dry_run:
-            return
+            return {
+                "ok": True,
+                "reason": "dry_run",
+                "transport": "dry_run",
+                "serial_device": None,
+                "command": 0x03,
+                "param": track,
+                "packet_hex": "",
+                "path_hint": f"mp3/{track:04d}.mp3",
+            }
         if self._ser is None and self._pi is None:
             self.open()
-        self.send_command(0x03, param=max(1, int(track_num)), feedback=False)
+
+        if self._ser is None and self._pi is None:
+            return {
+                "ok": False,
+                "reason": "transport_not_open",
+                "transport": "none",
+                "serial_device": None,
+                "command": 0x03,
+                "param": track,
+                "packet_hex": "",
+                "path_hint": f"mp3/{track:04d}.mp3",
+            }
+
+        transport_kind = "kernel_serial" if self._ser is not None else "gpio_soft_uart"
+        serial_dev = self._active_serial_port if self._ser is not None else None
+
+        packet = _dfplayer_packet(command=0x03, param=track, feedback=0)
+        ok, reason = self._write_packet_result(packet)
+        return {
+            "ok": bool(ok),
+            "reason": reason,
+            "transport": transport_kind,
+            "serial_device": serial_dev,
+            "command": 0x03,
+            "param": track,
+            "packet_hex": packet.hex(),
+            "path_hint": f"mp3/{track:04d}.mp3",
+        }
 
     def play_folder_track(self, folder_num: int, file_num: int) -> None:
         """
@@ -329,29 +375,36 @@ class AudioMP3:
             time.sleep(0.01)
         return None
 
+    def _write_packet_result(self, packet: bytes) -> tuple[bool, str]:
+        """Write raw packet; return (success, short reason for logs)."""
+        if self._ser is not None:
+            try:
+                self._ser.write(packet)
+                if hasattr(self._ser, "flush"):
+                    self._ser.flush()
+                return True, "serial_write_ok"
+            except Exception as e:
+                return False, f"serial_write_failed:{e}"
+        if self._pi is not None:
+            try:
+                self._pi.wave_clear()
+                self._pi.wave_add_serial(MP3_TX_GPIO, MP3_BAUD, packet)
+                wid = self._pi.wave_create()
+                if wid < 0:
+                    return False, f"pigpio_wave_create_failed:{wid}"
+                self._pi.wave_send_once(wid)
+                while self._pi.wave_tx_busy():
+                    time.sleep(0.001)
+                self._pi.wave_delete(wid)
+                time.sleep(0.03)
+                return True, "pigpio_wave_sent"
+            except Exception as e:
+                return False, f"pigpio_failed:{e}"
+        return False, "no_transport"
+
     def _write_packet(self, packet: bytes) -> None:
         """Write packet over kernel serial or pigpio TX wave serial."""
-        if self._ser is not None:
-            self._ser.write(packet)
-            return
-        if self._pi is not None:
-            self._send_soft_uart(packet)
-
-    def _send_soft_uart(self, packet: bytes) -> None:
-        """Send bytes on MP3_TX_GPIO via pigpio wave serial."""
-        if self._pi is None:
-            return
-        self._pi.wave_clear()
-        self._pi.wave_add_serial(MP3_TX_GPIO, MP3_BAUD, packet)
-        wid = self._pi.wave_create()
-        if wid < 0:
-            return
-        self._pi.wave_send_once(wid)
-        while self._pi.wave_tx_busy():
-            time.sleep(0.001)
-        self._pi.wave_delete(wid)
-        # Give DFPlayer time to process and potentially answer.
-        time.sleep(0.03)
+        self._write_packet_result(packet)
 
     def _pump_input(self) -> None:
         """Read available RX bytes into local buffer."""

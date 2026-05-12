@@ -377,8 +377,37 @@ def _handle_alert(
 
     voice_ctx = _prepare_voice_cancel(dry_run, voice_cancel_keyword, voice_device_index)
     try:
-        # DFPlayer layout: SD:/mp3/0001.mp3 etc.; play_track(1) -> 0001.mp3
-        audio_mod.play_track(track_num)
+        # DFPlayer layout: SD:/mp3/0001.mp3 etc.; command 0x03 (see mp3_play_command log).
+        play_status = audio_mod.play_track_with_status(track_num)
+        ts_cmd = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+        logging_store.log_event(
+            {
+                "event": "mp3_play_command",
+                "timestamp": ts_cmd,
+                "selection_reason": selection_reason,
+                "ok": bool(play_status.get("ok")),
+                "reason": play_status.get("reason"),
+                "transport": play_status.get("transport"),
+                "serial_device": play_status.get("serial_device"),
+                "command": play_status.get("command"),
+                "param": play_status.get("param"),
+                "packet_hex": play_status.get("packet_hex"),
+                "path_hint": play_status.get("path_hint"),
+            }
+        )
+        if play_status.get("ok"):
+            print(
+                f"[MP3] Play command sent (0x{int(play_status.get('command', 0)):02x} "
+                f"track={play_status.get('param')}, transport={play_status.get('transport')}, "
+                f"serial={play_status.get('serial_device') or 'n/a'}, "
+                f"packet={play_status.get('packet_hex')})"
+            )
+        else:
+            print(
+                f"[MP3] Play command failed: {play_status.get('reason')} "
+                f"(transport={play_status.get('transport')}); "
+                "module may not receive UART — check TX wiring and power."
+            )
         print(f"Countdown audio selected: mp3/{track_num:04d}.mp3 ({selection_reason})")
         cancelled, cancel_reason = _wait_for_cancel_window(
             timeout_sec=max(0.5, float(COUNTDOWN_SECONDS)),
@@ -402,6 +431,12 @@ def _handle_alert(
                     "track": track_num,
                     "reason": selection_reason,
                 },
+                "mp3_command": {
+                    "ok": bool(play_status.get("ok")),
+                    "reason": play_status.get("reason"),
+                    "transport": play_status.get("transport"),
+                    "packet_hex": play_status.get("packet_hex"),
+                },
             }
         )
         return
@@ -424,6 +459,12 @@ def _handle_alert(
                 "path": f"mp3/{track_num:04d}.mp3",
                 "track": track_num,
                 "reason": selection_reason,
+            },
+            "mp3_command": {
+                "ok": bool(play_status.get("ok")),
+                "reason": play_status.get("reason"),
+                "transport": play_status.get("transport"),
+                "packet_hex": play_status.get("packet_hex"),
             },
             "collision_location": location,
         }
