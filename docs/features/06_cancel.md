@@ -31,6 +31,16 @@ See `docs/phase0_module_boundaries.md` — `cancel`:
 - Keyword: "cancel"
 - Consider offline keyword spotting for reliability in helmet (wind, noise)
 
+### Mic bench test
+
+```bash
+python -m src.mic_test
+python -m src.mic_test --list-only
+python -m src.mic_test --device-index 0 --threshold 1200
+```
+
+Runs until **Ctrl+C**; logs device enumeration, stream open, first chunk (`mic_test_working`), and **`mic_sound_detected`** (RMS) to `logs/events_*.jsonl`.
+
 ## Implementation (Phase 1)
 
 - **File**: `src/cancel.py`
