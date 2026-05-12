@@ -114,19 +114,27 @@ class AudioMP3:
                 pass
 
     def _try_open_kernel_serial(self) -> bool:
-        """Try configured MP3 serial first, then /dev/ttyUSB0..3."""
+        """
+        Open a kernel serial device only when MP3_SERIAL_PORT is set.
+
+        If the port is None, DFPlayer is expected on GPIO soft UART (pigpio);
+        we must not open an unrelated /dev/ttyUSB* (e.g. another adapter), or
+        play commands and RX feedback would not match the wired pins.
+        """
         try:
             import serial
         except ImportError:
             return False
 
-        candidates: list[str] = []
-        if self._port:
-            candidates.append(str(self._port))
-        for idx in range(4):
-            dev = f"/dev/ttyUSB{idx}"
-            if dev not in candidates:
-                candidates.append(dev)
+        if not self._port:
+            return False
+
+        candidates: list[str] = [str(self._port)]
+        if str(self._port).startswith("/dev/ttyUSB"):
+            for idx in range(4):
+                dev = f"/dev/ttyUSB{idx}"
+                if dev not in candidates:
+                    candidates.append(dev)
 
         for dev in candidates:
             if not os.path.exists(dev):
