@@ -38,9 +38,7 @@ from src.config import (
     GSM_WAIT_POLL_SEC,
     GSM_WAIT_REGISTER_SEC,
     IMPACT_LOG_COOLDOWN_SEC,
-    MP3_DEFAULT_FILE,
-    MP3_DEFAULT_FOLDER,
-    MP3_FOLDER_SCAN_MAX,
+    MP3_DEFAULT_TRACK,
     VOICE_CANCEL_KEYWORD_ENABLED,
     VOICE_CANCEL_SOUND_ENABLED,
     VOICE_SOUND_CHUNK_SIZE,
@@ -375,14 +373,13 @@ def _handle_alert(
     """Play countdown audio and log event for this phase."""
     ax, ay, az = sensor.read_g() if not dry_run else (0.0, 0.0, 0.0)
     location = _resolve_collision_location(dry_run=dry_run)
-    folder_num, file_num, selection_reason = _select_countdown_audio(audio_mod=audio_mod, dry_run=dry_run)
+    track_num, selection_reason = _select_countdown_audio(audio_mod=audio_mod, dry_run=dry_run)
 
     voice_ctx = _prepare_voice_cancel(dry_run, voice_cancel_keyword, voice_device_index)
     try:
-        # Play countdown audio from folder-based DFPlayer layout.
-        # Example: SD:/001/001.mp3 when folder=1 file=1.
-        audio_mod.play_folder_track(folder_num, file_num)
-        print(f"Countdown audio selected: {folder_num:03d}/{file_num:03d}.mp3 ({selection_reason})")
+        # DFPlayer layout: SD:/mp3/0001.mp3 etc.; play_track(1) -> 0001.mp3
+        audio_mod.play_track(track_num)
+        print(f"Countdown audio selected: mp3/{track_num:04d}.mp3 ({selection_reason})")
         cancelled, cancel_reason = _wait_for_cancel_window(
             timeout_sec=max(0.5, float(COUNTDOWN_SECONDS)),
             dry_run=dry_run,
@@ -401,8 +398,8 @@ def _handle_alert(
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
                 "reason": cancel_reason,
                 "audio_selected": {
-                    "folder": folder_num,
-                    "file": file_num,
+                    "path": f"mp3/{track_num:04d}.mp3",
+                    "track": track_num,
                     "reason": selection_reason,
                 },
             }
@@ -424,8 +421,8 @@ def _handle_alert(
             "accel_g": {"ax": ax, "ay": ay, "az": az},
             "countdown_seconds": COUNTDOWN_SECONDS,
             "audio_selected": {
-                "folder": folder_num,
-                "file": file_num,
+                "path": f"mp3/{track_num:04d}.mp3",
+                "track": track_num,
                 "reason": selection_reason,
             },
             "collision_location": location,
@@ -581,26 +578,30 @@ def _resolve_collision_location(dry_run: bool) -> dict | None:
         gps_mod.close()
 
 
-def _select_countdown_audio(audio_mod: audio_mp3.AudioMP3, dry_run: bool) -> tuple[int, int, str]:
+def _select_countdown_audio(audio_mod: audio_mp3.AudioMP3, dry_run: bool) -> tuple[int, str]:
     """
-    Select countdown audio target.
+    Select countdown clip for DFPlayer layout ``mp3/0001.mp3``, ``mp3/0002.mp3``, ...
+
+    Uses command 0x03 via ``play_track`` (1-based index → 4-digit filename).
 
     Strategy:
-      1) If dry-run: use configured default.
-      2) If DFPlayer feedback is available, scan folder 1..MP3_FOLDER_SCAN_MAX and pick first with files.
-      3) Fallback to configured default when feedback is unavailable.
+      1) Dry-run: configured default track only.
+      2) If TF file count is available, clamp ``MP3_DEFAULT_TRACK`` to 1..count.
+      3) If feedback unavailable, use ``MP3_DEFAULT_TRACK`` anyway.
     """
-    fallback = (int(MP3_DEFAULT_FOLDER), int(MP3_DEFAULT_FILE), "default config")
+    default_t = max(1, min(255, int(MP3_DEFAULT_TRACK)))
     if dry_run:
-        return fallback
-    folder_upper = max(1, int(MP3_FOLDER_SCAN_MAX))
-    for folder in range(1, folder_upper + 1):
-        count = audio_mod.query_folder_file_count(folder, timeout_sec=0.45)
-        if count is None:
-            return (fallback[0], fallback[1], "feedback unavailable; fallback default")
-        if count > 0:
-            return (folder, 1, f"first non-empty folder found (files={count})")
-    return (fallback[0], fallback[1], "no non-empty folder found; fallback default")
+        return default_t, "dry_run default"
+    tf_count = audio_mod.query_tf_file_count(timeout_sec=0.45)
+    if tf_count is None:
+        return default_t, "feedback unavailable; fallback default"
+    if int(tf_count) <= 0:
+        return default_t, "TF reports zero files; fallback default"
+    n = int(tf_count)
+    track = max(1, min(default_t, n))
+    if track != default_t:
+        return track, f"default track {default_t} clamped to {track} (TF reports {n} file(s))"
+    return track, f"TF reports {n} file(s); playing track index {track}"
 
 
 def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool) -> None:

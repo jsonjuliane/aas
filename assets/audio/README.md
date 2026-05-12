@@ -4,13 +4,13 @@ Place pre-recorded countdown audio here for the DFPlayer Mini module.
 
 ## Format
 
-- **File**: `001.mp3` (or first track on SD card in DFPlayer)
-- **Content**: 5-second countdown voice prompt, e.g. "Alert in 5, 4, 3, 2, 1. Sending emergency message."
-- **Purpose**: Played during the cancellation window so the rider can say "cancel" or press the button.
+- **On SD card (DFPlayer)**: `mp3/0001.mp3` (four-digit name in an `mp3` folder at card root). Track index `1` in code maps to `0001.mp3`.
+- **Content**: Short countdown voice prompt for the cancel window.
+- **Purpose**: Played during the cancellation window so the rider can abort (sound / button / optional keyword).
 
-## DFPlayer Mini SD Card
+## DFPlayer Mini SD card
 
-The DFPlayer reads from an SD card. Copy your countdown MP3 as the first file (e.g. `001.mp3` in the `mp3` folder on the SD card). See DFPlayer Mini documentation for folder structure.
+Copy the finished clip to the card as **`mp3/0001.mp3`** (matching `MP3_DEFAULT_TRACK` in `src/config.py`).
 
 ## Recording
 

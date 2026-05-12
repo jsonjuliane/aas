@@ -88,7 +88,7 @@ def _play_once(
             print(f"[INFO] Playing folder/file {int(folder):03d}/{int(file_num):03d} for ~{hold_sec:.1f}s...")
             mod.play_folder_track(int(folder), int(file_num))
         else:
-            print(f"[INFO] Playing track {track} for ~{hold_sec:.1f}s...")
+            print(f"[INFO] Playing track {track} → expects SD:/mp3/{track:04d}.mp3 (~{hold_sec:.1f}s)...")
             mod.play_track(track)
         time.sleep(max(0.2, hold_sec))
         if not no_stop:
@@ -194,7 +194,7 @@ def main() -> int:
         "--track",
         type=int,
         default=1,
-        help="Single track number to play (default 1)",
+        help="Track index for SD:/mp3/0001.mp3 layout (default 1 → 0001.mp3)",
     )
     ap.add_argument(
         "--track-sec",

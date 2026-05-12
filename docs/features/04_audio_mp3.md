@@ -28,9 +28,9 @@ See `docs/phase0_module_boundaries.md` — `audio_mp3`:
 - `play_track(track_num)` — Play track (1-based)
 - `stop()` — Stop playback
 
-## Audio Files
+## Audio files (SD card)
 
-Place pre-recorded countdown files in `assets/audio/` as `001.mp3`, `002.mp3`, etc. (or in `mp3` folder on SD card for DFPlayer).
+On the DFPlayer microSD, use a folder named **`mp3`** at the card root with files **`0001.mp3`**, **`0002.mp3`**, … (four digits). The firmware command `play_track(1)` plays `mp3/0001.mp3`. You can keep copies in repo `assets/audio/` for editing, then deploy to the SD with the `0001.mp3` naming.
 
 ## Implementation (Phase 1)
 

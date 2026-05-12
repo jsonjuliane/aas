@@ -172,10 +172,10 @@ class AudioMP3:
 
     def play_track(self, track_num: int) -> None:
         """
-        Play track by number (1-based).
+        Play track by index using DFPlayer command 0x03 (typical layout).
 
-        Args:
-            track_num: Track index (1 = first file on SD).
+        With the standard **mp3/** folder on the SD card, files should be named
+        ``0001.mp3``, ``0002.mp3``, …; track ``1`` plays ``mp3/0001.mp3``.
         """
         if self._dry_run:
             return

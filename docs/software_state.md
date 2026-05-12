@@ -8,7 +8,7 @@
 | **Sensor** | `sensor_mpu6050.py` | MPU-6050 @ I2C `0x68` | `calibrate()` at start; `is_impact_detected()` uses accel magnitude + baseline tilt. |
 | **GPS** | `gps.py` | GPS UART | Reads NMEA from `GPS_SERIAL_PORT` **or** GPIO software UART (pigpio) when port is `None` (default for GPIO20/21 wiring). `get_fix()` parses `$GPGGA`. |
 | **GSM** | `gsm_sim800l.py` | SIM800L on `/dev/serial0` | `send_sms()` via AT commands. |
-| **Audio** | `audio_mp3.py` | DFPlayer-style on UART | `play_track(1)` sends serial frame via kernel serial port **or** pigpio GPIO TX when `MP3_SERIAL_PORT=None` (default for GPIO19 wiring). |
+| **Audio** | `audio_mp3.py` | DFPlayer-style on UART | `play_track(N)` → `mp3/000N.mp3` on the SD card (command 0x03); kernel serial **or** pigpio GPIO TX when `MP3_SERIAL_PORT=None` (GPIO19 wiring). |
 | **Cancel** | `cancel.py` | GPIO **17** (optional button) | Active-low with pull-up. **Not** on the main wiring table — add a button or change pin in `config.py`. |
 | **Contacts** | `contacts.py` | — | Loads `config/contacts.family.json` (family SMS list + template). |
 | **Logging** | `logging_store.py` | — | Appends JSON lines under `logs/`. |
@@ -27,7 +27,7 @@
 3. **Config:** `config/contacts.family.json` exists with valid numbers; optional `subject_home_barangay` for future routing.  
 4. **Serial paths:** **`GPS_SERIAL_PORT=None`** and **`MP3_SERIAL_PORT=None`** use pigpio GPIO software UART (GPS on GPIO20/21, MP3 TX on GPIO19). If using USB adapters, set to `/dev/ttyUSB*`. Do not point GPS and GSM at the same `ttyS0`.  
 5. **Cancel:** Wire a momentary switch to **GPIO 17** + GND or change `CANCEL_BUTTON_GPIO`.  
-6. **MP3:** SD card in DFPlayer with track `001`; for breadboard wiring keep `MP3_SERIAL_PORT=None` (GPIO soft UART). Use `/dev/ttyUSB*` only when MP3 is moved to USB-TTL.
+6. **MP3:** SD card uses **`mp3/0001.mp3`** (etc.); set `MP3_DEFAULT_TRACK` in `config.py`. Keep `MP3_SERIAL_PORT=None` for GPIO soft UART, or `/dev/ttyUSB*` for USB-TTL.
 Then run:
 
 ```bash

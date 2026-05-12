@@ -43,12 +43,9 @@ MP3_BAUD = 9600
 # Default to GPIO software UART for DFPlayer in the current wiring.
 # Set to e.g. "/dev/ttyUSB0" only when MP3 is on a USB-TTL adapter.
 MP3_SERIAL_PORT: str | None = None
-# Folder-based playback defaults for DFPlayer layout:
-# SD root/001/001.mp3 (countdown), SD root/002/001.mp3, etc.
-MP3_DEFAULT_FOLDER = 1
-MP3_DEFAULT_FILE = 1
-# Scan range used to find first non-empty folder via DFPlayer feedback.
-MP3_FOLDER_SCAN_MAX = 20
+# DFPlayer SD layout: mp3/0001.mp3, mp3/0002.mp3, ... (4-digit names in an "mp3" folder).
+# Serial command 0x03 play index N targets 000N.mp3 in that folder (see audio_mp3.play_track).
+MP3_DEFAULT_TRACK = 1
 
 # Optional cancel button (Phase 1 fallback)
 CANCEL_BUTTON_GPIO = 17  # Optional; add if you wire a cancel button
