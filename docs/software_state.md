@@ -27,7 +27,7 @@
 3. **Config:** `config/contacts.family.json` exists with valid numbers; optional `subject_home_barangay` for future routing.  
 4. **Serial paths:** **`GPS_SERIAL_PORT=None`** and **`MP3_SERIAL_PORT=None`** use pigpio GPIO software UART (GPS on GPIO20/21, MP3 TX on GPIO19). If using USB adapters, set to `/dev/ttyUSB*`. Do not point GPS and GSM at the same `ttyS0`.  
 5. **Cancel:** Wire a momentary switch to **GPIO 17** + GND or change `CANCEL_BUTTON_GPIO`.  
-6. **MP3:** SD card in DFPlayer with track `001`; USB-TTL path must match `MP3_SERIAL_PORT`.  
+6. **MP3:** SD card in DFPlayer with track `001`; for breadboard wiring keep `MP3_SERIAL_PORT=None` (GPIO soft UART). Use `/dev/ttyUSB*` only when MP3 is moved to USB-TTL.
 Then run:
 
 ```bash

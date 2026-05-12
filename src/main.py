@@ -14,6 +14,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
+import os
 import sys
 import time
 from pathlib import Path
@@ -47,6 +49,28 @@ from src import (
     logging_store,
     sensor_mpu6050,
 )
+
+
+@contextlib.contextmanager
+def _suppress_native_stderr():
+    """
+    Temporarily suppress native stderr noise (ALSA/JACK via PortAudio).
+    """
+    try:
+        stderr_fd = sys.stderr.fileno()
+    except Exception:
+        yield
+        return
+
+    saved_fd = os.dup(stderr_fd)
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(devnull_fd, stderr_fd)
+        yield
+    finally:
+        os.dup2(saved_fd, stderr_fd)
+        os.close(devnull_fd)
+        os.close(saved_fd)
 
 
 def run(
@@ -292,6 +316,8 @@ def _wait_for_cancel_window(
     keyword = voice_cancel_keyword.strip().lower() or "cancel"
     recognizer = None
     mic = None
+    selected_voice_device_index = voice_device_index
+    selected_voice_device_name = "system default"
     voice_available = False
     playback_feedback_known = False
     playback_done = False
@@ -302,9 +328,27 @@ def _wait_for_cancel_window(
             import speech_recognition as sr
 
             recognizer = sr.Recognizer()
-            mic = sr.Microphone(device_index=voice_device_index)
+            with _suppress_native_stderr():
+                mic_names = sr.Microphone.list_microphone_names()
+
+            # Keep main default aligned with hardware_check:
+            # use the first detected microphone when index is not explicitly provided.
+            if selected_voice_device_index is None and mic_names:
+                selected_voice_device_index = 0
+
+            if (
+                selected_voice_device_index is not None
+                and 0 <= selected_voice_device_index < len(mic_names)
+            ):
+                selected_voice_device_name = mic_names[selected_voice_device_index]
+
+            with _suppress_native_stderr():
+                mic = sr.Microphone(device_index=selected_voice_device_index)
             voice_available = True
-            print(f"Voice cancel enabled (keyword='{keyword}').")
+            print(
+                f"Voice cancel enabled (keyword='{keyword}', "
+                f"mic_index={selected_voice_device_index}, mic='{selected_voice_device_name}')."
+            )
         except Exception as e:
             print(f"Voice cancel unavailable: {e}")
 
@@ -320,8 +364,9 @@ def _wait_for_cancel_window(
                 break
             chunk = min(1.0, max(0.2, remaining))
             try:
-                with mic as source:
-                    audio = recognizer.listen(source, timeout=chunk, phrase_time_limit=chunk)
+                with _suppress_native_stderr():
+                    with mic as source:
+                        audio = recognizer.listen(source, timeout=chunk, phrase_time_limit=chunk)
                 heard = recognizer.recognize_google(audio).strip().lower()
                 if keyword in heard:
                     return True, "voice_cancel"

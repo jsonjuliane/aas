@@ -80,7 +80,8 @@ Typical device path is `/dev/serial0` (preferred) or `/dev/ttyAMA0` depending on
 The prototype uses an **MP3 player module** (e.g. DFPlayer Mini) on **UART** (GPIO 19/26 per wiring table), driving a **small speaker** — not the Pi’s HDMI or USB audio.
 
 - Put track `001` on the module’s SD card (see `src/audio_mp3.py` / DFPlayer conventions).
-- Set `MP3_SERIAL_PORT` in `src/config.py` to the serial device that reaches the module (often conflicts with GPS if both need the same hardware UART; see `docs/software_state.md`).
+- Keep `MP3_SERIAL_PORT=None` in `src/config.py` for GPIO soft-serial wiring (GPIO 19/26).  
+  If you move MP3 to USB-TTL, set `MP3_SERIAL_PORT` to the matching `/dev/ttyUSB*`.
 
 ---
 

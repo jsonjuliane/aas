@@ -9,7 +9,9 @@ Writes human-readable lines to logs/hardware_check.log for WARN/SKIP/FAIL (and s
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -39,6 +41,28 @@ _LOG_NAME = "hardware_check.log"
 
 # Incremented on each [FAIL] line (for exit code).
 _hardware_check_failures = 0
+
+
+@contextlib.contextmanager
+def _suppress_native_stderr():
+    """
+    Temporarily suppress native stderr noise (ALSA/JACK via PortAudio).
+    """
+    try:
+        stderr_fd = sys.stderr.fileno()
+    except Exception:
+        yield
+        return
+
+    saved_fd = os.dup(stderr_fd)
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(devnull_fd, stderr_fd)
+        yield
+    finally:
+        os.dup2(saved_fd, stderr_fd)
+        os.close(devnull_fd)
+        os.close(saved_fd)
 
 
 def _log_file_path() -> Path:
@@ -567,7 +591,8 @@ def _check_voice_cancel_hardware() -> None:
         return
 
     try:
-        mic_names = sr.Microphone.list_microphone_names()
+        with _suppress_native_stderr():
+            mic_names = sr.Microphone.list_microphone_names()
     except Exception as e:
         _emit(
             "WARN",
@@ -585,8 +610,9 @@ def _check_voice_cancel_hardware() -> None:
         return
 
     try:
-        with sr.Microphone() as _:
-            pass
+        with _suppress_native_stderr():
+            with sr.Microphone() as _:
+                pass
     except Exception as e:
         _emit(
             "WARN",

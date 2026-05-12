@@ -68,13 +68,22 @@ So you **do** use both modules; the limit was **mis-configuring GPS as `ttyS0`**
 
 - A **USB-TTL adapter** (also **USB–serial**, FTDI/CP2102/CH340 dongle) is **not** a microphone. It is a **small USB device**: one end **USB into the Pi**, the other end **TX / RX / GND** wires to **DFPlayer RX / TX / GND** so Linux exposes something like **`/dev/ttyUSB0`**. That matches what `MP3_SERIAL_PORT` expects when you use **`/dev/ttyUSB0`**.
 
-- If you **do not** have a USB-TTL dongle, you can still wire DFPlayer to **GPIO 19/26** on the breadboard, but the **current** Python code expects a **`/dev/tty*`** for `audio_mp3` — GPIO bit-bang on 19/26 would need extra code (e.g. pigpio) or a different wiring strategy. Until then, set **`MP3_SERIAL_PORT = None`** and **`python -m src.hardware_check`** will **SKIP** MP3 serial (not a “missing microphone”).
+- The **current** Python code already supports both paths:
+  - **GPIO soft serial (pigpio)** with `MP3_SERIAL_PORT = None` (recommended in current breadboard wiring)
+  - **USB-TTL serial** with `MP3_SERIAL_PORT = "/dev/ttyUSB*"` when using an adapter
 
 ---
 
 ## Software serial note
 
-GPS and MP3 use **GPIO UART** in the wiring plan. The current Python code opens **kernel serial devices** (`/dev/serial0`, `/dev/ttyUSB*`) where applicable. If your image maps a hardware UART to GPS, set `GPS_SERIAL_PORT` in `src/config.py`. For true GPIO UART on 20/21 without a `/dev/tty*`, a lower-level driver (e.g. pigpio) would be needed — document any change on the prototype.
+GPS and MP3 use **GPIO software UART** in the wiring plan and both are implemented via **pigpio** when their serial-port config is `None`.
+
+- Keep GSM on hardware UART: `SIM800L_UART_DEVICE=/dev/serial0`
+- Keep GPS on GPIO soft UART: `GPS_SERIAL_PORT=None` (GPIO20/21)
+- Keep MP3 on GPIO soft UART: `MP3_SERIAL_PORT=None` (GPIO19/26)
+- If MP3 or GPS is moved to a USB adapter, set that module’s `*_SERIAL_PORT` to `/dev/ttyUSB*`
+
+When using GPIO soft UART, ensure `pigpiod` is running.
 
 ---
 

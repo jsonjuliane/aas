@@ -40,9 +40,9 @@ MP3_RX_GPIO = 26  # Pi RX ← MP3 TX (via 1kΩ resistor)
 # Set to BCM pin number if wired (e.g. 16), else keep None.
 MP3_BUSY_GPIO: int | None = None
 MP3_BAUD = 9600
-# Use dedicated USB-TTL for DFPlayer because Pi hardware UART is occupied by GSM.
-# Update if your adapter enumerates as a different device (e.g. /dev/ttyUSB1).
-MP3_SERIAL_PORT: str | None = "/dev/ttyUSB0"
+# Default to GPIO software UART for DFPlayer in the current wiring.
+# Set to e.g. "/dev/ttyUSB0" only when MP3 is on a USB-TTL adapter.
+MP3_SERIAL_PORT: str | None = None
 # Folder-based playback defaults for DFPlayer layout:
 # SD root/001/001.mp3 (countdown), SD root/002/001.mp3, etc.
 MP3_DEFAULT_FOLDER = 1
