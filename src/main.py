@@ -14,10 +14,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import audioop
 import contextlib
 import os
 import sys
+import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 # Ensure project root on path
@@ -38,6 +41,12 @@ from src.config import (
     MP3_DEFAULT_FILE,
     MP3_DEFAULT_FOLDER,
     MP3_FOLDER_SCAN_MAX,
+    VOICE_CANCEL_KEYWORD_ENABLED,
+    VOICE_CANCEL_SOUND_ENABLED,
+    VOICE_SOUND_CHUNK_SIZE,
+    VOICE_SOUND_RMS_SUSTAIN_CHUNKS,
+    VOICE_SOUND_RMS_THRESHOLD,
+    VOICE_SOUND_SAMPLE_RATE,
 )
 from src import (
     audio_mp3,
@@ -71,6 +80,132 @@ def _suppress_native_stderr():
         os.dup2(saved_fd, stderr_fd)
         os.close(devnull_fd)
         os.close(saved_fd)
+
+
+@dataclass
+class VoiceCancelContext:
+    """Microphone resources for cancel window (sound level and/or keyword)."""
+
+    recognizer: object | None = None
+    mic: object | None = None
+    speech_ok: bool = False
+    pa: object | None = None
+    stream: object | None = None
+    sound_ok: bool = False
+    selected_device_index: int | None = None
+
+
+def _close_voice_cancel_context(ctx: VoiceCancelContext) -> None:
+    if ctx.stream is not None:
+        try:
+            ctx.stream.stop_stream()
+            ctx.stream.close()
+        except Exception:
+            pass
+        ctx.stream = None
+    if ctx.pa is not None:
+        try:
+            ctx.pa.terminate()
+        except Exception:
+            pass
+        ctx.pa = None
+
+
+def _prepare_voice_cancel(
+    dry_run: bool,
+    voice_cancel_keyword: str,
+    voice_device_index: int | None,
+) -> VoiceCancelContext:
+    """
+    Open mic paths before countdown audio: optional PyAudio RMS stream and/or SpeechRecognition.
+    """
+    ctx = VoiceCancelContext()
+    if dry_run:
+        return ctx
+
+    selected_voice_device_index = voice_device_index
+    selected_voice_device_name = "system default"
+
+    if VOICE_CANCEL_SOUND_ENABLED or VOICE_CANCEL_KEYWORD_ENABLED:
+        try:
+            import speech_recognition as sr
+
+            with _suppress_native_stderr():
+                mic_names = sr.Microphone.list_microphone_names()
+
+            if selected_voice_device_index is None and mic_names:
+                selected_voice_device_index = 0
+
+            if (
+                selected_voice_device_index is not None
+                and 0 <= selected_voice_device_index < len(mic_names)
+            ):
+                selected_voice_device_name = mic_names[selected_voice_device_index]
+
+            ctx.selected_device_index = selected_voice_device_index
+        except ImportError:
+            if VOICE_CANCEL_KEYWORD_ENABLED:
+                print("Voice keyword cancel unavailable: SpeechRecognition not installed.")
+        except Exception as e:
+            print(f"Voice cancel mic enumeration failed: {e}")
+
+    keyword = voice_cancel_keyword.strip().lower() or "cancel"
+
+    if VOICE_CANCEL_KEYWORD_ENABLED:
+        try:
+            import speech_recognition as sr
+
+            ctx.recognizer = sr.Recognizer()
+            with _suppress_native_stderr():
+                ctx.mic = sr.Microphone(device_index=ctx.selected_device_index)
+            ctx.speech_ok = True
+            print(
+                f"Voice keyword cancel enabled (keyword='{keyword}', "
+                f"mic_index={ctx.selected_device_index}, mic='{selected_voice_device_name}')."
+            )
+        except Exception as e:
+            print(f"Voice keyword cancel unavailable: {e}")
+
+    if VOICE_CANCEL_SOUND_ENABLED:
+        try:
+            import pyaudio
+
+            pa = pyaudio.PyAudio()
+            stream = None
+            for rate in (VOICE_SOUND_SAMPLE_RATE, 44100, 48000):
+                try:
+                    stream = pa.open(
+                        format=pyaudio.paInt16,
+                        channels=1,
+                        rate=rate,
+                        input=True,
+                        input_device_index=ctx.selected_device_index,
+                        frames_per_buffer=VOICE_SOUND_CHUNK_SIZE,
+                    )
+                    break
+                except Exception:
+                    stream = None
+                    continue
+            if stream is not None:
+                ctx.pa = pa
+                ctx.stream = stream
+                ctx.sound_ok = True
+                print(
+                    "Sound-level cancel enabled "
+                    f"(mic_index={ctx.selected_device_index}, RMS≥{VOICE_SOUND_RMS_THRESHOLD}, "
+                    f"sustain={VOICE_SOUND_RMS_SUSTAIN_CHUNKS} chunks). "
+                    "Speak or tap the mic to abort."
+                )
+            else:
+                pa.terminate()
+                print("Sound-level cancel unavailable: PyAudio could not open the microphone.")
+        except Exception as e:
+            print(f"Sound-level cancel unavailable: {e}")
+
+    if not ctx.speech_ok and not ctx.sound_ok:
+        print("No voice/sound cancel path active (button cancel still works if wired).")
+
+    return ctx
 
 
 def run(
@@ -242,23 +377,21 @@ def _handle_alert(
     location = _resolve_collision_location(dry_run=dry_run)
     folder_num, file_num, selection_reason = _select_countdown_audio(audio_mod=audio_mod, dry_run=dry_run)
 
-    voice_recognizer, voice_mic, voice_ok = _prepare_voice_cancel_mic(
-        dry_run, voice_cancel_keyword, voice_device_index
-    )
-
-    # Play countdown audio from folder-based DFPlayer layout.
-    # Example: SD:/001/001.mp3 when folder=1 file=1.
-    audio_mod.play_folder_track(folder_num, file_num)
-    print(f"Countdown audio selected: {folder_num:03d}/{file_num:03d}.mp3 ({selection_reason})")
-    cancelled, cancel_reason = _wait_for_cancel_window(
-        timeout_sec=max(0.5, float(COUNTDOWN_SECONDS)),
-        dry_run=dry_run,
-        audio_mod=audio_mod,
-        voice_cancel_keyword=voice_cancel_keyword,
-        recognizer=voice_recognizer,
-        mic=voice_mic,
-        voice_available=voice_ok,
-    )
+    voice_ctx = _prepare_voice_cancel(dry_run, voice_cancel_keyword, voice_device_index)
+    try:
+        # Play countdown audio from folder-based DFPlayer layout.
+        # Example: SD:/001/001.mp3 when folder=1 file=1.
+        audio_mod.play_folder_track(folder_num, file_num)
+        print(f"Countdown audio selected: {folder_num:03d}/{file_num:03d}.mp3 ({selection_reason})")
+        cancelled, cancel_reason = _wait_for_cancel_window(
+            timeout_sec=max(0.5, float(COUNTDOWN_SECONDS)),
+            dry_run=dry_run,
+            audio_mod=audio_mod,
+            voice_cancel_keyword=voice_cancel_keyword,
+            voice_ctx=voice_ctx,
+        )
+    finally:
+        _close_voice_cancel_context(voice_ctx)
     audio_mod.stop()
     if cancelled:
         print(f"Countdown cancelled ({cancel_reason}). SMS flow aborted.")
@@ -301,59 +434,13 @@ def _handle_alert(
     _send_alert_sms(location=location, dry_run=dry_run, disable_sms_send=disable_sms_send)
 
 
-def _prepare_voice_cancel_mic(
-    dry_run: bool,
-    voice_cancel_keyword: str,
-    voice_device_index: int | None,
-) -> tuple[object | None, object | None, bool]:
-    """
-    Open SpeechRecognition + default USB mic before countdown audio starts.
-
-    Mic enumeration/open can take several seconds on the Pi; doing it after
-    play_folder_track() would burn most of COUNTDOWN_SECONDS while audio plays.
-    """
-    if dry_run:
-        return None, None, False
-    keyword = voice_cancel_keyword.strip().lower() or "cancel"
-    selected_voice_device_index = voice_device_index
-    selected_voice_device_name = "system default"
-    try:
-        import speech_recognition as sr
-
-        recognizer = sr.Recognizer()
-        with _suppress_native_stderr():
-            mic_names = sr.Microphone.list_microphone_names()
-
-        if selected_voice_device_index is None and mic_names:
-            selected_voice_device_index = 0
-
-        if (
-            selected_voice_device_index is not None
-            and 0 <= selected_voice_device_index < len(mic_names)
-        ):
-            selected_voice_device_name = mic_names[selected_voice_device_index]
-
-        with _suppress_native_stderr():
-            mic = sr.Microphone(device_index=selected_voice_device_index)
-        print(
-            f"Voice cancel enabled (keyword='{keyword}', "
-            f"mic_index={selected_voice_device_index}, mic='{selected_voice_device_name}')."
-        )
-        return recognizer, mic, True
-    except Exception as e:
-        print(f"Voice cancel unavailable: {e}")
-        return None, None, False
-
-
 def _wait_for_cancel_window(
     timeout_sec: float,
     dry_run: bool,
     audio_mod: audio_mp3.AudioMP3,
     voice_cancel_keyword: str,
     *,
-    recognizer: object | None,
-    mic: object | None,
-    voice_available: bool,
+    voice_ctx: VoiceCancelContext,
 ) -> tuple[bool, str]:
     """
     Wait through countdown window and check cancellation sources.
@@ -365,66 +452,106 @@ def _wait_for_cancel_window(
     keyword = voice_cancel_keyword.strip().lower() or "cancel"
     playback_feedback_known = False
     playback_done = False
-    last_reported_sec = -1
     announced_audio_mode = False
+    loud_streak = 0
 
     t_start = time.monotonic()
     t_fallback_end = t_start + timeout_sec
     # Safety cap to avoid hanging forever if module status gets stuck as "playing".
     t_hard_end = t_start + max(timeout_sec + 120.0, timeout_sec * 4.0)
 
-    while time.monotonic() < t_hard_end:
-        # GPIO/button cancel path
-        if cancel.wait_for_cancel(timeout_sec=0.05, dry_run=dry_run):
-            return True, "button_cancel"
+    stop_tick = threading.Event()
+    playback_known_shared = [False]
 
-        # Optional voice-cancel path
-        if voice_available and recognizer is not None and mic is not None:
-            remaining = t_hard_end - time.monotonic()
-            if remaining <= 0:
-                break
-            chunk = min(1.0, max(0.2, remaining))
-            try:
-                with _suppress_native_stderr():
-                    with mic as source:
-                        audio = recognizer.listen(source, timeout=chunk, phrase_time_limit=chunk)
-                heard = recognizer.recognize_google(audio).strip().lower()
-                if keyword in heard:
-                    return True, "voice_cancel"
-            except Exception:
-                # Ignore transient audio/recognition errors during window.
-                pass
+    def _fallback_second_ticker() -> None:
+        """Wall-clock fallback countdown logs (survives main-thread blocking)."""
+        last_rem: int | None = None
+        while not stop_tick.is_set():
+            if playback_known_shared[0]:
+                return
+            now = time.monotonic()
+            if now >= t_fallback_end:
+                if last_rem != 0:
+                    print("Cancel window (fallback): 0s remaining...")
+                return
+            rem = max(0, int(t_fallback_end - now + 0.999))
+            if rem != last_rem:
+                print(f"Cancel window (fallback): {rem}s remaining...")
+                last_rem = rem
+            time.sleep(0.05)
 
-        # Keep checking whether playback already ended when serial feedback exists.
-        waited = audio_mod.wait_for_playback_end(timeout_sec=0.05, poll_interval_sec=0.05)
-        if waited is True:
-            playback_feedback_known = True
-            playback_done = True
-        elif waited is False:
-            playback_feedback_known = True
-            playback_done = False
+    tick_thread = threading.Thread(target=_fallback_second_ticker, daemon=True)
+    tick_thread.start()
 
-        now = time.monotonic()
-        if playback_feedback_known:
-            if not announced_audio_mode:
-                print("Cancel window follows actual MP3 playback duration (say 'cancel' any time while audio is playing).")
-                announced_audio_mode = True
-        else:
-            remaining_sec = max(0, int(t_fallback_end - now + 0.999))
-            if remaining_sec != last_reported_sec:
-                last_reported_sec = remaining_sec
-                print(f"Cancel window (fallback): {remaining_sec}s remaining...")
-        # Preferred behavior:
-        # - If playback status feedback is available, use actual MP3 duration (end when playback ends).
-        # - If feedback is unavailable, fall back to configured timeout window.
-        if playback_feedback_known:
-            if playback_done:
-                return False, "audio_finished"
-        elif now >= t_fallback_end:
-            return False, "timeout_fallback"
-        time.sleep(0.05)
+    try:
+        while time.monotonic() < t_hard_end:
+            # GPIO/button cancel path
+            if cancel.wait_for_cancel(timeout_sec=0.05, dry_run=dry_run):
+                return True, "button_cancel"
 
-    return False, "timeout_hard_cap"
+            # Sound-level cancel (short non-blocking reads)
+            if voice_ctx.sound_ok and voice_ctx.stream is not None:
+                try:
+                    raw = voice_ctx.stream.read(VOICE_SOUND_CHUNK_SIZE, exception_on_overflow=False)
+                    rms = audioop.rms(raw, 2)
+                    if rms >= VOICE_SOUND_RMS_THRESHOLD:
+                        loud_streak += 1
+                    else:
+                        loud_streak = 0
+                    if loud_streak >= VOICE_SOUND_RMS_SUSTAIN_CHUNKS:
+                        return True, "sound_cancel"
+                except Exception:
+                    loud_streak = 0
+
+            # Optional keyword cancel (short timeout so logs are not starved)
+            if (
+                VOICE_CANCEL_KEYWORD_ENABLED
+                and voice_ctx.speech_ok
+                and voice_ctx.recognizer is not None
+                and voice_ctx.mic is not None
+            ):
+                try:
+                    with _suppress_native_stderr():
+                        with voice_ctx.mic as source:
+                            audio = voice_ctx.recognizer.listen(
+                                source, timeout=0.25, phrase_time_limit=0.4
+                            )
+                    heard = voice_ctx.recognizer.recognize_google(audio).strip().lower()
+                    if keyword in heard:
+                        return True, "voice_cancel"
+                except Exception:
+                    pass
+
+            # Keep checking whether playback already ended when serial feedback exists.
+            waited = audio_mod.wait_for_playback_end(timeout_sec=0.05, poll_interval_sec=0.05)
+            if waited is True:
+                playback_feedback_known = True
+                playback_done = True
+            elif waited is False:
+                playback_feedback_known = True
+                playback_done = False
+
+            now = time.monotonic()
+            if playback_feedback_known:
+                playback_known_shared[0] = True
+                if not announced_audio_mode:
+                    print(
+                        "Cancel window follows actual MP3 playback duration "
+                        "(speak or use button cancel while audio is playing)."
+                    )
+                    announced_audio_mode = True
+            # Fallback countdown lines are printed by _fallback_second_ticker.
+
+            if playback_feedback_known:
+                if playback_done:
+                    return False, "audio_finished"
+            elif now >= t_fallback_end:
+                return False, "timeout_fallback"
+            time.sleep(0.02)
+
+        return False, "timeout_hard_cap"
+    finally:
+        stop_tick.set()
 
 
 def _resolve_collision_location(dry_run: bool) -> dict | None:

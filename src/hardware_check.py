@@ -26,6 +26,7 @@ from src.config import (
     MPU6050_I2C_ADDR,
     MPU6050_I2C_BUS,
     MP3_BAUD,
+    MP3_RX_GPIO,
     MP3_SERIAL_PORT,
     MP3_TX_GPIO,
     PROJECT_ROOT,
@@ -574,6 +575,17 @@ def _check_mp3_serial() -> None:
             )
             return
         print(f"[{'OK':5}] MP3 transport ready ({using} @ {MP3_BAUD})")
+
+        vol = mp3_mod.query_volume(timeout_sec=0.9)
+        if vol is not None:
+            print(f"[{'OK':5}] DFPlayer serial feedback (RX): volume query OK (reported vol={vol})")
+        else:
+            _emit(
+                "WARN",
+                "MP3 DFPlayer RX feedback not detected (playback may still work one-way)",
+                f"Wire DFPlayer TX → Pi RX (BCM GPIO {MP3_RX_GPIO}, physical pin 37). "
+                "Use a series resistor if module TX is 5 V. Requires pigpio RX or USB-TTL RX path.",
+            )
     finally:
         mp3_mod.close()
 

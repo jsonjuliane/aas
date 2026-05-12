@@ -63,7 +63,19 @@ ACCEL_THRESHOLD_G_MAX = 5.0  # Upper bound for validation
 TILT_DELTA_THRESHOLD_G = 1.5  # Baseline delta required to validate true collision
 ACTION_COOLDOWN_SEC = 8.0  # Debounce action flow after a true collision
 IMPACT_LOG_COOLDOWN_SEC = 0.75  # Debounce impact candidate logs in main loop
-COUNTDOWN_SECONDS = 5
+# Temporary longer cancel window for field testing (restore to 5 when stable).
+COUNTDOWN_SECONDS = 10
+
+# Voice / mic cancel during countdown
+# Sound-based cancel: any sustained loud input aborts (PyAudio RMS; tune threshold on device).
+VOICE_CANCEL_SOUND_ENABLED = True
+VOICE_SOUND_RMS_THRESHOLD = 900  # audioop RMS on 16-bit mono; raise if wind/fan false-triggers
+VOICE_SOUND_RMS_SUSTAIN_CHUNKS = 5  # consecutive loud chunks before cancel
+VOICE_SOUND_SAMPLE_RATE = 16000
+VOICE_SOUND_CHUNK_SIZE = 512
+# Google keyword path can block for ~1s per iteration and skip countdown logs; off by default.
+VOICE_CANCEL_KEYWORD_ENABLED = False
+
 GPS_COLLISION_FIX_TIMEOUT_SEC = 8.0
 GSM_WAIT_REGISTER_SEC = 30.0  # Max wait for network registration before SMS send
 GSM_WAIT_POLL_SEC = 2.0  # Poll interval while waiting for GSM readiness
