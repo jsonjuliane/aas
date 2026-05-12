@@ -242,6 +242,10 @@ def _handle_alert(
     location = _resolve_collision_location(dry_run=dry_run)
     folder_num, file_num, selection_reason = _select_countdown_audio(audio_mod=audio_mod, dry_run=dry_run)
 
+    voice_recognizer, voice_mic, voice_ok = _prepare_voice_cancel_mic(
+        dry_run, voice_cancel_keyword, voice_device_index
+    )
+
     # Play countdown audio from folder-based DFPlayer layout.
     # Example: SD:/001/001.mp3 when folder=1 file=1.
     audio_mod.play_folder_track(folder_num, file_num)
@@ -251,7 +255,9 @@ def _handle_alert(
         dry_run=dry_run,
         audio_mod=audio_mod,
         voice_cancel_keyword=voice_cancel_keyword,
-        voice_device_index=voice_device_index,
+        recognizer=voice_recognizer,
+        mic=voice_mic,
+        voice_available=voice_ok,
     )
     audio_mod.stop()
     if cancelled:
@@ -295,12 +301,59 @@ def _handle_alert(
     _send_alert_sms(location=location, dry_run=dry_run, disable_sms_send=disable_sms_send)
 
 
+def _prepare_voice_cancel_mic(
+    dry_run: bool,
+    voice_cancel_keyword: str,
+    voice_device_index: int | None,
+) -> tuple[object | None, object | None, bool]:
+    """
+    Open SpeechRecognition + default USB mic before countdown audio starts.
+
+    Mic enumeration/open can take several seconds on the Pi; doing it after
+    play_folder_track() would burn most of COUNTDOWN_SECONDS while audio plays.
+    """
+    if dry_run:
+        return None, None, False
+    keyword = voice_cancel_keyword.strip().lower() or "cancel"
+    selected_voice_device_index = voice_device_index
+    selected_voice_device_name = "system default"
+    try:
+        import speech_recognition as sr
+
+        recognizer = sr.Recognizer()
+        with _suppress_native_stderr():
+            mic_names = sr.Microphone.list_microphone_names()
+
+        if selected_voice_device_index is None and mic_names:
+            selected_voice_device_index = 0
+
+        if (
+            selected_voice_device_index is not None
+            and 0 <= selected_voice_device_index < len(mic_names)
+        ):
+            selected_voice_device_name = mic_names[selected_voice_device_index]
+
+        with _suppress_native_stderr():
+            mic = sr.Microphone(device_index=selected_voice_device_index)
+        print(
+            f"Voice cancel enabled (keyword='{keyword}', "
+            f"mic_index={selected_voice_device_index}, mic='{selected_voice_device_name}')."
+        )
+        return recognizer, mic, True
+    except Exception as e:
+        print(f"Voice cancel unavailable: {e}")
+        return None, None, False
+
+
 def _wait_for_cancel_window(
     timeout_sec: float,
     dry_run: bool,
     audio_mod: audio_mp3.AudioMP3,
     voice_cancel_keyword: str,
-    voice_device_index: int | None,
+    *,
+    recognizer: object | None,
+    mic: object | None,
+    voice_available: bool,
 ) -> tuple[bool, str]:
     """
     Wait through countdown window and check cancellation sources.
@@ -309,48 +362,16 @@ def _wait_for_cancel_window(
         (cancelled, reason)
     """
     timeout_sec = max(0.2, float(timeout_sec))
-    t_start = time.monotonic()
-    t_fallback_end = t_start + timeout_sec
-    # Safety cap to avoid hanging forever if module status gets stuck as "playing".
-    t_hard_end = t_start + max(timeout_sec + 120.0, timeout_sec * 4.0)
     keyword = voice_cancel_keyword.strip().lower() or "cancel"
-    recognizer = None
-    mic = None
-    selected_voice_device_index = voice_device_index
-    selected_voice_device_name = "system default"
-    voice_available = False
     playback_feedback_known = False
     playback_done = False
     last_reported_sec = -1
     announced_audio_mode = False
-    if not dry_run:
-        try:
-            import speech_recognition as sr
 
-            recognizer = sr.Recognizer()
-            with _suppress_native_stderr():
-                mic_names = sr.Microphone.list_microphone_names()
-
-            # Keep main default aligned with hardware_check:
-            # use the first detected microphone when index is not explicitly provided.
-            if selected_voice_device_index is None and mic_names:
-                selected_voice_device_index = 0
-
-            if (
-                selected_voice_device_index is not None
-                and 0 <= selected_voice_device_index < len(mic_names)
-            ):
-                selected_voice_device_name = mic_names[selected_voice_device_index]
-
-            with _suppress_native_stderr():
-                mic = sr.Microphone(device_index=selected_voice_device_index)
-            voice_available = True
-            print(
-                f"Voice cancel enabled (keyword='{keyword}', "
-                f"mic_index={selected_voice_device_index}, mic='{selected_voice_device_name}')."
-            )
-        except Exception as e:
-            print(f"Voice cancel unavailable: {e}")
+    t_start = time.monotonic()
+    t_fallback_end = t_start + timeout_sec
+    # Safety cap to avoid hanging forever if module status gets stuck as "playing".
+    t_hard_end = t_start + max(timeout_sec + 120.0, timeout_sec * 4.0)
 
     while time.monotonic() < t_hard_end:
         # GPIO/button cancel path
