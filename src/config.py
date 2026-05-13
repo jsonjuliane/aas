@@ -64,11 +64,11 @@ IMPACT_LOG_COOLDOWN_SEC = 0.75  # Debounce impact candidate logs in main loop
 COUNTDOWN_SECONDS = 10
 
 # Voice / mic cancel during countdown
-# Sound-based cancel: any sustained loud input aborts (PyAudio RMS; tune threshold on device).
-VOICE_CANCEL_SOUND_ENABLED = True
-# Temporary: threshold=1 for testing until mic gain is fixed (restore to ~900 for field use).
-VOICE_SOUND_RMS_THRESHOLD = 1  # audioop RMS on 16-bit mono; raise if wind/fan false-triggers
-VOICE_SOUND_RMS_SUSTAIN_CHUNKS = 5  # consecutive loud chunks before cancel
+# Sound-level cancel disabled; using keyword cancel only ("cancel" via Google speech).
+# Set VOICE_CANCEL_SOUND_ENABLED = True to re-enable RMS-based cancel.
+VOICE_CANCEL_SOUND_ENABLED = False
+VOICE_SOUND_RMS_THRESHOLD = 900  # audioop RMS on 16-bit mono (inactive while sound cancel is off)
+VOICE_SOUND_RMS_SUSTAIN_CHUNKS = 5
 VOICE_SOUND_SAMPLE_RATE = 16000
 VOICE_SOUND_CHUNK_SIZE = 512
 VOICE_CANCEL_KEYWORD_ENABLED = True
