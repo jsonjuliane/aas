@@ -66,12 +66,12 @@ COUNTDOWN_SECONDS = 10
 # Voice / mic cancel during countdown
 # Sound-based cancel: any sustained loud input aborts (PyAudio RMS; tune threshold on device).
 VOICE_CANCEL_SOUND_ENABLED = True
-VOICE_SOUND_RMS_THRESHOLD = 900  # audioop RMS on 16-bit mono; raise if wind/fan false-triggers
+# Temporary: threshold=1 for testing until mic gain is fixed (restore to ~900 for field use).
+VOICE_SOUND_RMS_THRESHOLD = 1  # audioop RMS on 16-bit mono; raise if wind/fan false-triggers
 VOICE_SOUND_RMS_SUSTAIN_CHUNKS = 5  # consecutive loud chunks before cancel
 VOICE_SOUND_SAMPLE_RATE = 16000
 VOICE_SOUND_CHUNK_SIZE = 512
-# Google keyword path can block for ~1s per iteration and skip countdown logs; off by default.
-VOICE_CANCEL_KEYWORD_ENABLED = False
+VOICE_CANCEL_KEYWORD_ENABLED = True
 
 GPS_COLLISION_FIX_TIMEOUT_SEC = 8.0
 GSM_WAIT_REGISTER_SEC = 30.0  # Max wait for network registration before SMS send
