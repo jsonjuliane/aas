@@ -209,18 +209,20 @@ def _prepare_voice_cancel(
         try:
             import pyaudio
 
-            pa = pyaudio.PyAudio()
+            with _suppress_native_stderr():
+                pa = pyaudio.PyAudio()
             stream = None
             for rate in (VOICE_SOUND_SAMPLE_RATE, 44100, 48000):
                 try:
-                    stream = pa.open(
-                        format=pyaudio.paInt16,
-                        channels=1,
-                        rate=rate,
-                        input=True,
-                        input_device_index=ctx.selected_device_index,
-                        frames_per_buffer=VOICE_SOUND_CHUNK_SIZE,
-                    )
+                    with _suppress_native_stderr():
+                        stream = pa.open(
+                            format=pyaudio.paInt16,
+                            channels=1,
+                            rate=rate,
+                            input=True,
+                            input_device_index=ctx.selected_device_index,
+                            frames_per_buffer=VOICE_SOUND_CHUNK_SIZE,
+                        )
                     break
                 except Exception:
                     stream = None
