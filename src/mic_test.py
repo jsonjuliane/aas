@@ -52,7 +52,8 @@ def _list_input_devices() -> list[tuple[int, str]]:
     """(index, name) for PyAudio input-capable devices."""
     import pyaudio
 
-    pa = pyaudio.PyAudio()
+    with _suppress_native_stderr():
+        pa = pyaudio.PyAudio()
     try:
         out: list[tuple[int, str]] = []
         n = pa.get_device_count()
@@ -155,7 +156,8 @@ def main() -> int:
 
     import pyaudio
 
-    pa = pyaudio.PyAudio()
+    with _suppress_native_stderr():
+        pa = pyaudio.PyAudio()
     stream = None
     rate_used = VOICE_SOUND_SAMPLE_RATE
     dev_index = args.device_index
@@ -163,14 +165,15 @@ def main() -> int:
     try:
         for rate in (VOICE_SOUND_SAMPLE_RATE, 44100, 48000):
             try:
-                stream = pa.open(
-                    format=pyaudio.paInt16,
-                    channels=1,
-                    rate=rate,
-                    input=True,
-                    input_device_index=dev_index,
-                    frames_per_buffer=chunk,
-                )
+                with _suppress_native_stderr():
+                    stream = pa.open(
+                        format=pyaudio.paInt16,
+                        channels=1,
+                        rate=rate,
+                        input=True,
+                        input_device_index=dev_index,
+                        frames_per_buffer=chunk,
+                    )
                 rate_used = rate
                 break
             except Exception:
