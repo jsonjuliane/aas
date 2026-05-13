@@ -563,6 +563,8 @@ def _wait_for_cancel_window(
     playback_done = False
     announced_audio_mode = False
     loud_streak = 0
+    last_rms_log_at = 0.0
+    _RMS_LOG_INTERVAL = 0.5
 
     t_start = time.monotonic()
     t_fallback_end = t_start + timeout_sec
@@ -649,11 +651,21 @@ def _wait_for_cancel_window(
                             audio = voice_ctx.recognizer.listen(
                                 source, timeout=0.25, phrase_time_limit=0.4
                             )
+                    raw_data = audio.get_raw_data(convert_rate=None, convert_width=2)
+                    chunk_rms = audioop.rms(raw_data, 2) if raw_data else 0
+                    now_rms = time.monotonic()
+                    if now_rms - last_rms_log_at >= _RMS_LOG_INTERVAL:
+                        last_rms_log_at = now_rms
+                        print(f"[Mic] Audio captured (RMS={chunk_rms}); sending to speech recognition...")
                     heard = voice_ctx.recognizer.recognize_google(audio).strip().lower()
+                    print(f"[Mic] Heard: {heard!r} (RMS={chunk_rms})")
                     if keyword in heard:
                         return True, "voice_cancel"
                 except Exception:
-                    pass
+                    now_rms = time.monotonic()
+                    if now_rms - last_rms_log_at >= _RMS_LOG_INTERVAL:
+                        last_rms_log_at = now_rms
+                        print("[Mic] No speech recognized in this chunk (silence or too quiet).")
 
             # Keep checking whether playback already ended when serial feedback exists.
             waited = audio_mod.wait_for_playback_end(timeout_sec=0.05, poll_interval_sec=0.05)
