@@ -47,8 +47,15 @@ MP3_SERIAL_PORT: str | None = None
 # Serial command 0x03 play index N targets 000N.mp3 in that folder (see audio_mp3.play_track).
 MP3_DEFAULT_TRACK = 1
 
-# Optional cancel button (Phase 1 fallback)
-CANCEL_BUTTON_GPIO = 17  # Optional; add if you wire a cancel button
+# Optional cancel button (active-low with pull-up)
+CANCEL_BUTTON_GPIO = 17  # Wire momentary switch between GPIO17 and GND
+
+# Optional buzzer fallback for countdown cues (GPIO -> transistor/active buzzer)
+BUZZER_GPIO = 18
+BUZZER_ACTIVE_HIGH = True  # Set False if your driver logic is inverted
+BUZZER_COUNTDOWN_ENABLED = True
+BUZZER_BEEP_SEC = 0.08
+BUZZER_FINAL_BEEP_SEC = 0.16
 
 # -----------------------------------------------------------------------------
 # Application constants

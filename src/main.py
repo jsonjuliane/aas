@@ -48,6 +48,7 @@ from src.config import (
 )
 from src import (
     audio_mp3,
+    buzzer_hw,
     cancel,
     contacts,
     gps,
@@ -276,6 +277,7 @@ def run(
         if not dry_run:
             sensor.calibrate()
             cancel.init()
+            buzzer_hw.silence()
         audio_mod.open()
         _print_init_status(
             dry_run=dry_run,
@@ -565,6 +567,9 @@ def _wait_for_cancel_window(
     loud_streak = 0
     last_rms_log_at = 0.0
     _RMS_LOG_INTERVAL = 0.5
+    buzzer_ready = False
+    if not dry_run:
+        buzzer_ready = bool(buzzer_hw.silence())
 
     t_start = time.monotonic()
     t_fallback_end = t_start + timeout_sec
@@ -588,6 +593,8 @@ def _wait_for_cancel_window(
             rem = max(0, int(t_fallback_end - now + 0.999))
             if rem != last_rem:
                 print(f"Cancel window (fallback): {rem}s remaining...")
+                if buzzer_ready and rem > 0:
+                    buzzer_hw.countdown_tick_beep(rem)
                 last_rem = rem
             time.sleep(0.05)
 
@@ -697,6 +704,8 @@ def _wait_for_cancel_window(
         return False, "timeout_hard_cap"
     finally:
         stop_tick.set()
+        if buzzer_ready:
+            buzzer_hw.silence()
 
 
 def _resolve_collision_location(dry_run: bool) -> dict | None:
