@@ -56,6 +56,7 @@ from src import (
     hardware_check,
     logging_store,
     sensor_mpu6050,
+    voice_cancel,
 )
 
 
@@ -88,6 +89,7 @@ class VoiceCancelContext:
     recognizer: object | None = None
     mic: object | None = None
     speech_ok: bool = False
+    keyword_session: voice_cancel.VoiceKeywordSession | None = None
     pa: object | None = None
     stream: object | None = None
     sound_ok: bool = False
@@ -108,6 +110,10 @@ def _voice_cancel_capabilities_payload(ctx: VoiceCancelContext) -> dict[str, obj
 
 
 def _close_voice_cancel_context(ctx: VoiceCancelContext) -> None:
+    voice_cancel.close_keyword_session(ctx.keyword_session)
+    ctx.keyword_session = None
+    ctx.recognizer = None
+    ctx.mic = None
     if ctx.stream is not None:
         try:
             ctx.stream.stop_stream()
@@ -192,19 +198,25 @@ def _prepare_voice_cancel(
     keyword = voice_cancel_keyword.strip().lower() or "cancel"
 
     if VOICE_CANCEL_KEYWORD_ENABLED:
-        try:
-            import speech_recognition as sr
-
-            ctx.recognizer = sr.Recognizer()
-            with _suppress_native_stderr():
-                ctx.mic = sr.Microphone(device_index=ctx.selected_device_index)
+        with _suppress_native_stderr():
+            session = voice_cancel.open_keyword_session(
+                device_index=ctx.selected_device_index,
+                keyword=keyword,
+            )
+        if session is not None:
+            ctx.keyword_session = session
+            ctx.recognizer = session.recognizer
+            ctx.mic = session.microphone
             ctx.speech_ok = True
+            selected_voice_device_name = session.device_name or selected_voice_device_name
+            ctx.selected_device_index = session.device_index
             print(
                 f"Voice keyword cancel enabled (keyword='{keyword}', "
-                f"mic_index={ctx.selected_device_index}, mic='{selected_voice_device_name}')."
+                f"mic_index={ctx.selected_device_index}, mic='{selected_voice_device_name}', "
+                f"energy_threshold={session.energy_threshold:.0f})."
             )
-        except Exception as e:
-            print(f"Voice keyword cancel unavailable: {e}")
+        else:
+            print("Voice keyword cancel unavailable (mic open or SpeechRecognition failed).")
 
     if VOICE_CANCEL_SOUND_ENABLED:
         try:
@@ -565,8 +577,6 @@ def _wait_for_cancel_window(
     playback_done = False
     announced_audio_mode = False
     loud_streak = 0
-    last_rms_log_at = 0.0
-    _RMS_LOG_INTERVAL = 0.5
     buzzer_ready = False
     if not dry_run:
         buzzer_ready = bool(buzzer_hw.silence())
@@ -600,6 +610,22 @@ def _wait_for_cancel_window(
 
     tick_thread = threading.Thread(target=_fallback_second_ticker, daemon=True)
     tick_thread.start()
+
+    keyword_bg_started = False
+    if (
+        not dry_run
+        and VOICE_CANCEL_KEYWORD_ENABLED
+        and voice_ctx.speech_ok
+        and voice_ctx.keyword_session is not None
+    ):
+        keyword_bg_started = voice_cancel.start_background_keyword_listen(voice_ctx.keyword_session)
+        if keyword_bg_started:
+            print(
+                f"[Mic] Background keyword listener active "
+                f"(say '{keyword}' clearly; needs internet for Google STT)."
+            )
+        else:
+            print("[Mic] Background keyword listener failed to start (button cancel still works).")
 
     if not dry_run:
         caps_listen = _voice_cancel_capabilities_payload(voice_ctx)
@@ -645,34 +671,10 @@ def _wait_for_cancel_window(
                 except Exception:
                     loud_streak = 0
 
-            # Optional keyword cancel (short timeout so logs are not starved)
-            if (
-                VOICE_CANCEL_KEYWORD_ENABLED
-                and voice_ctx.speech_ok
-                and voice_ctx.recognizer is not None
-                and voice_ctx.mic is not None
-            ):
-                try:
-                    with _suppress_native_stderr():
-                        with voice_ctx.mic as source:
-                            audio = voice_ctx.recognizer.listen(
-                                source, timeout=0.25, phrase_time_limit=0.4
-                            )
-                    raw_data = audio.get_raw_data(convert_rate=None, convert_width=2)
-                    chunk_rms = audioop.rms(raw_data, 2) if raw_data else 0
-                    now_rms = time.monotonic()
-                    if now_rms - last_rms_log_at >= _RMS_LOG_INTERVAL:
-                        last_rms_log_at = now_rms
-                        print(f"[Mic] Audio captured (RMS={chunk_rms}); sending to speech recognition...")
-                    heard = voice_ctx.recognizer.recognize_google(audio).strip().lower()
-                    print(f"[Mic] Heard: {heard!r} (RMS={chunk_rms})")
-                    if keyword in heard:
-                        return True, "voice_cancel"
-                except Exception:
-                    now_rms = time.monotonic()
-                    if now_rms - last_rms_log_at >= _RMS_LOG_INTERVAL:
-                        last_rms_log_at = now_rms
-                        print("[Mic] No speech recognized in this chunk (silence or too quiet).")
+            # Keyword cancel (background listener started above; non-blocking)
+            if keyword_bg_started and voice_ctx.keyword_session is not None:
+                if voice_ctx.keyword_session.cancel_requested:
+                    return True, "voice_cancel"
 
             # Keep checking whether playback already ended when serial feedback exists.
             waited = audio_mod.wait_for_playback_end(timeout_sec=0.05, poll_interval_sec=0.05)
@@ -704,6 +706,8 @@ def _wait_for_cancel_window(
         return False, "timeout_hard_cap"
     finally:
         stop_tick.set()
+        if voice_ctx.keyword_session is not None:
+            voice_cancel.stop_background_listening(voice_ctx.keyword_session)
         if buzzer_ready:
             buzzer_hw.silence()
 

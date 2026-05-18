@@ -1,12 +1,13 @@
 """
-USB / system microphone bench test — listen until Ctrl+C.
+USB / system microphone bench test.
 
-Logs to console and appends JSON lines to logs/events_YYYY-MM-DD.jsonl (same as main).
+Modes:
+  python -m src.mic_test                    # RMS monitor (logs on level changes)
+  python -m src.mic_test --baseline        # measure idle noise + suggest threshold
+  python -m src.mic_test --keyword-test    # keyword recognition loop (like main)
+  python -m src.mic_test --record out.wav  # save a short WAV sample
 
-Run on Raspberry Pi (venv active):
-
-    python -m src.mic_test
-    python -m src.mic_test --device-index 0 --threshold 1200
+Run on Raspberry Pi (venv active).
 """
 
 from __future__ import annotations
@@ -19,11 +20,12 @@ import sys
 import time
 
 from src.config import (
+    VOICE_KEYWORD_MIN_RMS,
     VOICE_SOUND_CHUNK_SIZE,
     VOICE_SOUND_RMS_THRESHOLD,
     VOICE_SOUND_SAMPLE_RATE,
 )
-from src import logging_store
+from src import logging_store, voice_cancel
 
 
 @contextlib.contextmanager
@@ -49,110 +51,135 @@ def _utc_ts() -> str:
 
 
 def _list_input_devices() -> list[tuple[int, str]]:
-    """(index, name) for PyAudio input-capable devices."""
     import pyaudio
 
     with _suppress_native_stderr():
         pa = pyaudio.PyAudio()
     try:
         out: list[tuple[int, str]] = []
-        n = pa.get_device_count()
-        for i in range(n):
+        for i in range(pa.get_device_count()):
             try:
                 info = pa.get_device_info_by_index(i)
             except Exception:
                 continue
             if int(info.get("maxInputChannels", 0)) < 1:
                 continue
-            name = str(info.get("name", "?"))
-            out.append((i, name))
+            out.append((i, str(info.get("name", "?"))))
         return out
     finally:
         pa.terminate()
 
 
-def _speech_mic_names() -> list[str] | None:
-    try:
-        import speech_recognition as sr
-
-        with _suppress_native_stderr():
-            return list(sr.Microphone.list_microphone_names())
-    except Exception:
-        return None
-
-
-def main() -> int:
-    ap = argparse.ArgumentParser(
-        description="Listen on microphone until Ctrl+C; log device info and sound (RMS) events",
+def _run_baseline(device_index: int | None, duration_sec: float) -> int:
+    print(f"[Mic] Measuring RMS baseline for {duration_sec:.1f}s (stay quiet)...")
+    stats = voice_cancel.measure_rms_stats(
+        device_index=device_index,
+        duration_sec=duration_sec,
     )
-    ap.add_argument(
-        "--device-index",
-        type=int,
-        default=None,
-        help="PyAudio input device index (default: system default input)",
-    )
-    ap.add_argument(
-        "--threshold",
-        type=int,
-        default=None,
-        help=f"audioop RMS threshold for 'sound detected' (default: {VOICE_SOUND_RMS_THRESHOLD})",
-    )
-    ap.add_argument(
-        "--chunk",
-        type=int,
-        default=VOICE_SOUND_CHUNK_SIZE,
-        help=f"Frames per buffer (default {VOICE_SOUND_CHUNK_SIZE})",
-    )
-    ap.add_argument(
-        "--log-interval",
-        type=float,
-        default=0.35,
-        help="Min seconds between mic_sound_detected JSON logs (default 0.35)",
-    )
-    ap.add_argument(
-        "--list-only",
-        action="store_true",
-        help="Print input devices and exit",
-    )
-    args = ap.parse_args()
-
-    threshold = int(VOICE_SOUND_RMS_THRESHOLD if args.threshold is None else args.threshold)
-    chunk = max(128, int(args.chunk))
-    log_interval = max(0.05, float(args.log_interval))
-
-    print("[Mic] Enumerating input devices...")
-    devices = _list_input_devices()
-    if not devices:
-        print("[FAIL] No PyAudio input devices found.")
-        logging_store.log_event(
-            {
-                "event": "mic_test_no_device",
-                "timestamp": _utc_ts(),
-                "reason": "no_input_devices",
-            }
-        )
+    if stats is None:
+        print("[FAIL] Could not sample microphone (PyAudio).")
         return 1
 
-    sr_names = _speech_mic_names()
-    print(f"[OK] Found {len(devices)} input device(s):")
-    for idx, name in devices:
-        extra = ""
-        if sr_names is not None and 0 <= idx < len(sr_names):
-            extra = f" | SpeechRecognition: {sr_names[idx]!r}"
-        print(f"     [{idx}] {name}{extra}")
-
+    print(
+        f"[OK] Baseline: min={stats['min']} avg={stats['avg']} p95={stats['p95']} "
+        f"max={stats['max']} @ {stats['sample_rate']}Hz ({stats['samples']} samples)"
+    )
+    print(
+        f"[INFO] Suggested VOICE_SOUND_RMS_THRESHOLD ≈ {stats['suggested_threshold']} "
+        f"(current config: {VOICE_SOUND_RMS_THRESHOLD})"
+    )
+    print(
+        f"[INFO] Suggested VOICE_KEYWORD_MIN_RMS ≈ {max(int(stats['p95']) + 400, 1200)} "
+        f"(current config: {VOICE_KEYWORD_MIN_RMS})"
+    )
     logging_store.log_event(
         {
-            "event": "mic_test_devices",
+            "event": "mic_test_baseline",
             "timestamp": _utc_ts(),
-            "count": len(devices),
-            "devices": [{"index": i, "name": n} for i, n in devices],
+            "device_index": device_index,
+            **{k: v for k, v in stats.items() if k != "samples"},
         }
     )
+    return 0
 
-    if args.list_only:
-        print("[DONE] --list-only: exiting.")
-        return 0
+
+def _run_keyword_test(
+    device_index: int | None,
+    keyword: str,
+    duration_sec: float,
+    *,
+    verbose: bool,
+) -> int:
+    print(f"[Mic] Keyword test for {duration_sec:.0f}s (say '{keyword}' clearly; needs internet)...")
+    with _suppress_native_stderr():
+        session = voice_cancel.open_keyword_session(
+            device_index=device_index,
+            keyword=keyword,
+        )
+    if session is None:
+        print("[FAIL] Could not open keyword session.")
+        return 1
+
+    print(
+        f"[OK] Mic open: index={session.device_index} name={session.device_name!r} "
+        f"energy_threshold={session.energy_threshold:.0f}"
+    )
+
+    deadline = time.monotonic() + max(1.0, duration_sec)
+    attempts = 0
+    matches = 0
+    try:
+        while time.monotonic() < deadline:
+            with _suppress_native_stderr():
+                result = voice_cancel.listen_once(session, timeout_sec=0.4)
+            attempts += 1
+
+            if result.matched:
+                matches += 1
+                print(f"[OK] Keyword matched! heard={result.heard!r} RMS={result.rms}")
+                break
+
+            if result.reason == "ok" or result.reason == "no_keyword":
+                print(f"[Mic] Heard: {result.heard!r} (RMS={result.rms}) — keyword not in phrase")
+            elif result.reason in ("timeout", "too_quiet"):
+                if verbose:
+                    print(f"[Mic] … {voice_cancel.reason_message(result.reason)}")
+            else:
+                print(f"[Mic] {voice_cancel.reason_message(result.reason)} (RMS={result.rms})")
+
+            time.sleep(0.05)
+    finally:
+        voice_cancel.close_keyword_session(session)
+
+    print(f"[DONE] attempts={attempts} matches={matches}")
+    return 0 if matches > 0 else 1
+
+
+def _run_record(device_index: int | None, path: str, duration_sec: float) -> int:
+    print(f"[Mic] Recording {duration_sec:.1f}s -> {path}")
+    ok = voice_cancel.record_wav(path, device_index=device_index, duration_sec=duration_sec)
+    if not ok:
+        print("[FAIL] Recording failed.")
+        return 1
+    print(f"[OK] Saved {path}")
+    return 0
+
+
+def _run_rms_monitor(
+    device_index: int | None,
+    threshold: int,
+    chunk: int,
+    log_interval: float,
+    run_baseline_first: bool,
+) -> int:
+    if run_baseline_first:
+        stats = voice_cancel.measure_rms_stats(device_index=device_index, duration_sec=2.0)
+        if stats is not None:
+            threshold = int(stats["suggested_threshold"])
+            print(
+                f"[INFO] Auto threshold from 2s baseline: {threshold} "
+                f"(idle p95={stats['p95']}, avg={stats['avg']})"
+            )
 
     import pyaudio
 
@@ -160,7 +187,6 @@ def main() -> int:
         pa = pyaudio.PyAudio()
     stream = None
     rate_used = VOICE_SOUND_SAMPLE_RATE
-    dev_index = args.device_index
 
     try:
         for rate in (VOICE_SOUND_SAMPLE_RATE, 44100, 48000):
@@ -171,121 +197,54 @@ def main() -> int:
                         channels=1,
                         rate=rate,
                         input=True,
-                        input_device_index=dev_index,
+                        input_device_index=device_index,
                         frames_per_buffer=chunk,
                     )
                 rate_used = rate
                 break
             except Exception:
                 stream = None
-                continue
 
         if stream is None:
-            print("[FAIL] Could not open microphone stream (wrong --device-index or driver issue).")
-            logging_store.log_event(
-                {
-                    "event": "mic_test_open_failed",
-                    "timestamp": _utc_ts(),
-                    "device_index": dev_index,
-                    "threshold": threshold,
-                }
-            )
+            print("[FAIL] Could not open microphone stream.")
             return 1
 
-        if dev_index is None:
-            default = pa.get_default_input_device_info()
-            resolved_index = int(default["index"])
-            dev_name = str(default.get("name", "?"))
-        else:
-            resolved_index = int(dev_index)
-            di = pa.get_device_info_by_index(resolved_index)
-            dev_name = str(di.get("name", "?"))
-
-        logging_store.log_event(
-            {
-                "event": "mic_test_device_ready",
-                "timestamp": _utc_ts(),
-                "device_index": resolved_index,
-                "device_name": dev_name,
-                "sample_rate": rate_used,
-                "chunk": chunk,
-                "rms_threshold": threshold,
-            }
-        )
         print(
-            f"[OK] Microphone open: index={resolved_index} name={dev_name!r} "
-            f"rate={rate_used} chunk={chunk} threshold_RMS={threshold}"
+            f"[OK] RMS monitor: threshold={threshold} rate={rate_used} chunk={chunk} "
+            "(logs when crossing quiet/loud; Ctrl+C to stop)"
         )
 
-        logging_store.log_event(
-            {
-                "event": "mic_test_listening",
-                "timestamp": _utc_ts(),
-                "message": "stream_active_until_ctrl_c",
-            }
-        )
-        print("[Mic] Listening… (sound above threshold is logged; Ctrl+C to stop)")
+        state = "quiet"
+        last_log = 0.0
+        events = 0
 
-        first_chunk = True
-        last_sound_log = 0.0
-        total_sound_events = 0
+        while True:
+            raw = stream.read(chunk, exception_on_overflow=False)
+            rms = int(audioop.rms(raw, 2))
+            now = time.monotonic()
+            loud = rms >= threshold
 
-        try:
-            while True:
-                try:
-                    raw = stream.read(chunk, exception_on_overflow=False)
-                except Exception as e:
-                    print(f"[FAIL] Read error: {e}")
-                    logging_store.log_event(
-                        {
-                            "event": "mic_test_read_error",
-                            "timestamp": _utc_ts(),
-                            "error": str(e),
-                        }
-                    )
-                    return 1
+            new_state = "loud" if loud else "quiet"
+            if new_state != state and (now - last_log) >= log_interval:
+                state = new_state
+                last_log = now
+                events += 1
+                logging_store.log_event(
+                    {
+                        "event": "mic_sound_state",
+                        "timestamp": _utc_ts(),
+                        "state": state,
+                        "rms": rms,
+                        "threshold": threshold,
+                    }
+                )
+                label = "Sound detected" if loud else "Back to quiet"
+                print(f"[Mic] {label} (RMS={rms}, threshold={threshold})")
 
-                if first_chunk:
-                    first_chunk = False
-                    logging_store.log_event(
-                        {
-                            "event": "mic_test_working",
-                            "timestamp": _utc_ts(),
-                            "message": "first_audio_chunk_received",
-                        }
-                    )
-                    print("[OK] First audio chunk received — mic stream is working.")
-
-                rms = audioop.rms(raw, 2)
-                now = time.monotonic()
-                if rms >= threshold and (now - last_sound_log) >= log_interval:
-                    total_sound_events += 1
-                    last_sound_log = now
-                    logging_store.log_event(
-                        {
-                            "event": "mic_sound_detected",
-                            "timestamp": _utc_ts(),
-                            "rms": int(rms),
-                            "threshold": threshold,
-                            "device_index": resolved_index,
-                        }
-                    )
-                    print(f"[Mic] Sound detected (RMS={rms}, threshold={threshold})")
-        except KeyboardInterrupt:
-            pass
-
-        logging_store.log_event(
-            {
-                "event": "mic_test_stopped",
-                "timestamp": _utc_ts(),
-                "reason": "keyboard_interrupt",
-                "sound_events_logged": total_sound_events,
-            }
-        )
-        print(f"\n[Mic] Stopped (Ctrl+C). Logged {total_sound_events} sound event(s).")
-        print(f"[Mic] JSONL log: {logging_store.get_log_path()}")
+    except KeyboardInterrupt:
+        print(f"\n[Mic] Stopped. {events} state change(s) logged.")
+        print(f"[Mic] JSONL: {logging_store.get_log_path()}")
         return 0
-
     finally:
         if stream is not None:
             try:
@@ -297,6 +256,80 @@ def main() -> int:
             pa.terminate()
         except Exception:
             pass
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Microphone bench test (RMS / keyword / record)")
+    ap.add_argument("--device-index", type=int, default=None, help="PyAudio input device index")
+    ap.add_argument(
+        "--threshold",
+        type=int,
+        default=None,
+        help=f"RMS threshold for monitor mode (default {VOICE_SOUND_RMS_THRESHOLD})",
+    )
+    ap.add_argument("--chunk", type=int, default=VOICE_SOUND_CHUNK_SIZE)
+    ap.add_argument("--log-interval", type=float, default=0.35)
+    ap.add_argument("--list-only", action="store_true", help="List devices and exit")
+    ap.add_argument("--baseline", action="store_true", help="Measure idle RMS + suggest thresholds")
+    ap.add_argument("--baseline-sec", type=float, default=3.0)
+    ap.add_argument(
+        "--keyword-test",
+        action="store_true",
+        help="Test Google keyword recognition (like alert cancel window)",
+    )
+    ap.add_argument("--keyword", type=str, default="cancel")
+    ap.add_argument("--keyword-sec", type=float, default=15.0)
+    ap.add_argument("--verbose", action="store_true", help="Log quiet/timeouts in keyword-test")
+    ap.add_argument("--record", type=str, default="", metavar="PATH", help="Record WAV and exit")
+    ap.add_argument("--record-sec", type=float, default=5.0)
+    ap.add_argument(
+        "--auto-threshold",
+        action="store_true",
+        help="In monitor mode, measure 2s baseline first and set threshold automatically",
+    )
+    args = ap.parse_args()
+
+    print("[Mic] Enumerating input devices...")
+    devices = _list_input_devices()
+    if not devices:
+        print("[FAIL] No PyAudio input devices found.")
+        return 1
+
+    sr_names = voice_cancel.list_microphone_names()
+    print(f"[OK] Found {len(devices)} input device(s):")
+    for idx, name in devices:
+        extra = ""
+        if sr_names and 0 <= idx < len(sr_names):
+            extra = f" | SR: {sr_names[idx]!r}"
+        print(f"     [{idx}] {name}{extra}")
+
+    if args.list_only:
+        return 0
+
+    dev = args.device_index
+
+    if args.baseline:
+        return _run_baseline(dev, args.baseline_sec)
+
+    if args.record:
+        return _run_record(dev, args.record, args.record_sec)
+
+    if args.keyword_test:
+        return _run_keyword_test(
+            dev,
+            args.keyword,
+            args.keyword_sec,
+            verbose=bool(args.verbose),
+        )
+
+    threshold = int(VOICE_SOUND_RMS_THRESHOLD if args.threshold is None else args.threshold)
+    return _run_rms_monitor(
+        dev,
+        threshold,
+        max(128, int(args.chunk)),
+        max(0.05, float(args.log_interval)),
+        run_baseline_first=bool(args.auto_threshold),
+    )
 
 
 if __name__ == "__main__":
