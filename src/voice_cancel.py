@@ -31,11 +31,10 @@ class KeywordListenResult:
 
 @dataclass
 class VoiceKeywordSession:
-    """Calibrated SpeechRecognition session (one mic open for a cancel window)."""
+    """Calibrated SpeechRecognition session for keyword cancel / bench tests."""
 
     recognizer: Any
     microphone: Any
-    source: Any
     keyword: str
     device_index: int | None
     device_name: str = ""
@@ -97,13 +96,14 @@ def open_keyword_session(
         recognizer.pause_threshold = 0.6
         recognizer.phrase_threshold = 0.25
         mic = sr.Microphone(device_index=idx)
-        source = mic.__enter__()
-        recognizer.adjust_for_ambient_noise(source, duration=ambient)
+        # Calibrate in a short context only; do not leave mic entered (background
+        # listen_in_background opens its own context in a worker thread).
+        with mic as source:
+            recognizer.adjust_for_ambient_noise(source, duration=ambient)
         energy = float(getattr(recognizer, "energy_threshold", 0.0))
         return VoiceKeywordSession(
             recognizer=recognizer,
             microphone=mic,
-            source=source,
             keyword=kw,
             device_index=idx,
             device_name=dev_name,
@@ -117,10 +117,6 @@ def close_keyword_session(session: VoiceKeywordSession | None) -> None:
     if session is None:
         return
     stop_background_listening(session)
-    try:
-        session.microphone.__exit__(None, None, None)
-    except Exception:
-        pass
 
 
 def start_background_keyword_listen(session: VoiceKeywordSession) -> bool:
@@ -158,7 +154,7 @@ def start_background_keyword_listen(session: VoiceKeywordSession) -> bool:
 
     try:
         session.stop_background = session.recognizer.listen_in_background(
-            session.source,
+            session.microphone,
             _callback,
             phrase_time_limit=phrase_sec,
         )
@@ -195,11 +191,12 @@ def listen_once(
         return KeywordListenResult(reason="unavailable")
 
     try:
-        audio = session.recognizer.listen(
-            session.source,
-            timeout=timeout,
-            phrase_time_limit=phrase,
-        )
+        with session.microphone as source:
+            audio = session.recognizer.listen(
+                source,
+                timeout=timeout,
+                phrase_time_limit=phrase,
+            )
     except sr.WaitTimeoutError:
         return KeywordListenResult(reason="timeout")
     except Exception as e:
