@@ -75,14 +75,14 @@ COUNTDOWN_SECONDS = 10
 # Set VOICE_CANCEL_SOUND_ENABLED = True to re-enable RMS-based cancel.
 VOICE_CANCEL_SOUND_ENABLED = False
 VOICE_CANCEL_KEYWORD_ENABLED = True
-VOICE_SOUND_RMS_THRESHOLD = 2500  # PyAudio RMS gate (raise if idle USB mic triggers false positives)
+VOICE_SOUND_RMS_THRESHOLD = 10000  # USB dongle baseline ~p95 6.2k; use mic_test --baseline to retune
 VOICE_SOUND_RMS_SUSTAIN_CHUNKS = 5
 VOICE_SOUND_SAMPLE_RATE = 16000
 VOICE_SOUND_CHUNK_SIZE = 512
 # Keyword path (SpeechRecognition + Google)
 VOICE_AMBIENT_CALIBRATION_SEC = 1.0  # adjust_for_ambient_noise once per alert
 VOICE_KEYWORD_PHRASE_SEC = 2.0  # max seconds per utterance ("cancel")
-VOICE_KEYWORD_MIN_RMS = 1500  # skip cloud STT below this (ambient-only chunks)
+VOICE_KEYWORD_MIN_RMS = 6500  # skip cloud STT below this (idle p95 ~6.2k on bench USB mic)
 VOICE_KEYWORD_LOG_QUIET = False  # if True, log every listen timeout (noisy)
 
 GPS_COLLISION_FIX_TIMEOUT_SEC = 8.0
