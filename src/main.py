@@ -39,6 +39,7 @@ from src.config import (
     GSM_WAIT_REGISTER_SEC,
     IMPACT_LOG_COOLDOWN_SEC,
     MP3_DEFAULT_TRACK,
+    MP3_DEFAULT_VOLUME,
     VOICE_CANCEL_KEYWORD_ENABLED,
     VOICE_CANCEL_SOUND_ENABLED,
     VOICE_SOUND_CHUNK_SIZE,
@@ -457,12 +458,16 @@ def _handle_alert(
     play_status: dict = {}
     try:
         # DFPlayer layout: SD:/mp3/0001.mp3 etc.; command 0x03 (see mp3_play_command log).
+        if not dry_run:
+            audio_mod.set_volume(MP3_DEFAULT_VOLUME)
+            print(f"[MP3] Volume set to {max(0, min(30, int(MP3_DEFAULT_VOLUME)))}")
         play_status = audio_mod.play_track_with_status(track_num)
         ts_cmd = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
         logging_store.log_event(
             {
                 "event": "mp3_play_command",
                 "timestamp": ts_cmd,
+                "volume": max(0, min(30, int(MP3_DEFAULT_VOLUME))) if not dry_run else None,
                 "selection_reason": selection_reason,
                 "ok": bool(play_status.get("ok")),
                 "reason": play_status.get("reason"),

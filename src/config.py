@@ -46,6 +46,7 @@ MP3_SERIAL_PORT: str | None = None
 # DFPlayer SD layout: mp3/0001.mp3, mp3/0002.mp3, ... (4-digit names in an "mp3" folder).
 # Serial command 0x03 play index N targets 000N.mp3 in that folder (see audio_mp3.play_track).
 MP3_DEFAULT_TRACK = 1
+MP3_DEFAULT_VOLUME = 12  # DFPlayer range 0..30; applied before countdown play in main
 
 # Optional cancel button (active-low with pull-up)
 CANCEL_BUTTON_GPIO = 17  # Wire momentary switch between GPIO17 and GND
