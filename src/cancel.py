@@ -1,7 +1,8 @@
 """
 SmartShell — Cancel mechanism during countdown.
 
-Phase 1: GPIO button. Phase 3 will add voice command.
+Provides GPIO button cancel (active-low, GPIO 17). Voice keyword cancel
+("cancel" via Google STT) runs in main.py using voice_cancel.py.
 See docs/features/06_cancel.md.
 """
 

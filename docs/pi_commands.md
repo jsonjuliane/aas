@@ -26,26 +26,44 @@ python3 -m src.main --help
 ## Run modes (same interpreter as above)
 
 ```bash
-python -m src.main --core-flow-only
-python -m src.main --core-flow-only --test-alert
-python -m src.main --dry-run
-python -m src.audio_test --track 1
-python -m src.hardware_check
-python -m src.gsm_test
-python -m src.gps_test
-python -m src.mpu_collision_test
-python -m src.main
+# Main app
+python -m src.main                              # Normal run (hardware required)
+python -m src.main --dry-run                    # No hardware; simulate
+python -m src.main --core-flow-only             # Sensor monitoring only; skip alert action
+python -m src.main --test-alert                 # Full alert cycle immediately (bench test)
+python -m src.main --test-alert --disable-sms-send  # Full alert without sending SMS
+
+# Hardware diagnostics
+python -m src.hardware_check                    # Full hardware probe (exit 1 on any FAIL)
+python -m src.gsm_test                          # GSM: baud sweep, SIM, signal
+python -m src.gps_test                          # GPS: NMEA stream, $GPGGA fixes
+python -m src.mpu_collision_test                # MPU: tap/collision JSONL test
+
+# Audio / MP3 (module reserved for future use)
+python -m src.audio_test --track 1              # Play DFPlayer track 1
+python -m src.mp3_diag                          # Full MP3-TF-16P bench diagnostic
+
+# Buzzer
+python -m src.buzzer_diag                       # Interactive polarity scan and GPIO sweep
+python -m src.buzzer_silence                    # Immediately silence GPIO 18
+python -m src.buzzer_silence --beep             # One beep then silence
+python -m src.buzzer_silence --verify           # Print current GPIO state
+
+# Microphone / voice cancel
+python -m src.mic_test --baseline               # Measure ambient noise; suggests threshold values
+python -m src.mic_test --keyword-test --keyword cancel  # Test Google STT keyword detection
+python -m src.mic_stt_oneshot                   # One-shot STT: checks flac, internet, mic, transcription
 ```
 
-- **`--core-flow-only`**: init + sensor monitoring / threshold / validation; logs core-flow impact events and skips action audio.
-- **`python -m src.hardware_check`**: one-shot I2C / GPIO / GSM (multi-baud AT + SIM/signal if OK) / GPS / MP3 probes. Exit code **1** if any line is **`[FAIL]`**, else **0**. **WARN / SKIP / FAIL / INFO** lines include indented **causes**; the same entries are appended to **`logs/hardware_check.log`** on the Pi (folder is gitignored).
+- **`--core-flow-only`**: init + sensor monitoring / threshold / validation; logs core-flow impact events and skips alert action.
+- **`python -m src.hardware_check`**: one-shot I2C / GPIO / GSM (multi-baud AT + SIM/signal if OK) / GPS / MP3 probes. Exit code **1** if any line is **`[FAIL]`**, else **0**. **WARN / SKIP / FAIL / INFO** lines include indented **causes**; entries are appended to **`logs/hardware_check.log`** on the Pi.
 - **`python -m src.gsm_test`**: deeper GSM bench (baud sweep, `AT+CPIN?`, `AT+CREG?`, `AT+CSQ`, `AT+COPS?`). Optional: `--send-sms PHONE "message"`.
 - **`python -m src.gps_test`**: auto-detect baud, stream NMEA for `--duration-sec` (default 30), print `$GPGGA` fixes.
 - **`python -m src.audio_test --track 1`**: play DFPlayer track 1 (`mp3/0001.mp3` layout). Use `--probe-range N` to test multiple tracks.
 - **`python -m src.mp3_diag`**: full **MP3-TF-16P** bench (reset 0x0C, TF select, volume, queries, `play_track`, optional `01/001` fallback). Same as `python -m src.audio_test --mp3tf16p-diag`.
-- **`python -m src.mic_test`**: open default mic, listen until **Ctrl+C**, log device list + **JSONL** `mic_test_*` / `mic_sound_detected` (RMS). `--list-only`, `--device-index N`, `--threshold RMS`.
+- **`python -m src.mic_test --baseline`**: measures ambient mic noise; prints `Suggested VOICE_SOUND_RMS_THRESHOLD` and `Suggested VOICE_KEYWORD_MIN_RMS` — update `config.py` with those values.
+- **`python -m src.mic_stt_oneshot`**: quick end-to-end check for speech recognition (verifies `flac` install, internet, mic, and transcription).
 - **`python -m src.mpu_collision_test`**: isolated MPU tap/collision JSONL test (see `--help`).
-- Startup prints sensor/audio init status for the current phase flow.
 
 ---
 
@@ -263,6 +281,26 @@ python -m src.hardware_check
 ## Boot service (optional)
 
 See `deploy/smartshell.service.example` and **Start on boot (`systemd`)** in `README.md`.
+
+### Buzzer silence service (recommended if buzzer wired)
+
+GPIO 18 floats HIGH at boot, which turns on an active-high buzzer before Python starts. Install a oneshot service to silence it early:
+
+```bash
+sudo cp deploy/smartshell-buzzer-silence.service.example /etc/systemd/system/smartshell-buzzer-silence.service
+sudo nano /etc/systemd/system/smartshell-buzzer-silence.service   # fix User / paths
+sudo systemctl daemon-reload
+sudo systemctl enable smartshell-buzzer-silence.service
+sudo systemctl start smartshell-buzzer-silence.service
+sudo systemctl status smartshell-buzzer-silence.service
+```
+
+Test manually:
+
+```bash
+python -m src.buzzer_silence            # drive GPIO 18 low (silent)
+python -m src.buzzer_silence --verify   # print current GPIO state
+```
 
 ---
 

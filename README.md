@@ -19,23 +19,25 @@ For the phased plan, see `docs/PLAN.md`. **Prototype hardware** (BOM, pins, powe
 
 ### Wiring
 
-| Pi Physical Pin | Function | Module | Wire to |
-|---|---|---|---|
-| 1 | 3.3V | MPU-6050 | VCC |
-| 2 | 5V | 5V buck output | +5V |
-| 3 | SDA1 | MPU-6050 | SDA |
-| 5 | SCL1 | MPU-6050 | SCL |
-| 6 | GND | 5V buck output | GND |
-| 8 | UART TXD0 | SIM800L | RXD |
-| 9 | GND | SIM800L | GND |
-| 10 | UART RXD0 | SIM800L | TXD |
-| 14 | GND | MPU-6050 | GND |
-| 30 | GND | MP3 player | GND |
-| 35 | GPIO19 | MP3 player | TX |
-| 37 | GPIO26 | MP3 player | RX (via 1kΩ) |
-| 34 | GND | GPS | GND |
-| 38 | GPIO20 | GPS | RX |
-| 40 | GPIO21 | GPS | TX |
+| Pi Physical Pin | BCM | Function | Module | Wire to |
+|---|---|---|---|---|
+| 1 | — | 3.3V | MPU-6050 | VCC |
+| 2 | — | 5V | 5V buck output | +5V |
+| 3 | 2 | SDA1 | MPU-6050 | SDA |
+| 5 | 3 | SCL1 | MPU-6050 | SCL |
+| 6 | — | GND | 5V buck output | GND |
+| 8 | 14 | UART TXD0 | SIM800L | RXD |
+| 9 | — | GND | SIM800L | GND |
+| 10 | 15 | UART RXD0 | SIM800L | TXD |
+| 11 | 17 | GPIO | Cancel button | Other leg to GND |
+| 12 | 18 | GPIO | Buzzer I/O | Active-high; VCC to 5V rail |
+| 14 | — | GND | MPU-6050 | GND |
+| 30 | — | GND | MP3 player | GND |
+| 35 | 19 | GPIO | MP3 player | TX (Pi → module RX) |
+| 37 | 26 | GPIO | MP3 player | RX (via 1kΩ) |
+| 34 | — | GND | GPS | GND |
+| 38 | 20 | GPIO | GPS | RX (Pi ← GPS TX) |
+| 40 | 21 | GPIO | GPS | TX (Pi → GPS RX) |
 
 **Important**: Use a **star ground** (common ground) across battery (-), both bucks, Pi ground, and all modules.
 
@@ -92,14 +94,13 @@ This repo already includes `requirements.txt`. Expect additional system packages
 ### Likely OS packages you’ll need
 
 - `python3-venv`, `python3-pip`
-- `portaudio` development headers if you use `pyaudio` (voice cancel)
-- `pigpio` for GPIO software UART (GPS/MP3 on breadboard GPIO pins)
-
-Example (may vary by OS version):
+- `portaudio` development headers — needed by `pyaudio` (voice cancel / mic test)
+- `pigpio` — GPIO software UART for GPS/MP3 on breadboard GPIO pins
+- `flac` — needed by Google Speech-to-Text (voice keyword cancel)
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y python3-venv python3-pip portaudio19-dev pigpio python3-pigpio
+sudo apt-get install -y python3-venv python3-pip portaudio19-dev pigpio python3-pigpio flac
 sudo systemctl enable --now pigpiod
 ```
 
@@ -178,24 +179,29 @@ Edit `config/contacts.family.json` and add real emergency phone numbers (E.164 f
    - If using the venv: **Tools → Options → Interpreter** → choose **Alternative Python 3** → browse to `AccidentAlertSystem/.venv/bin/python3`.
 4. Press **F5** or **Run** to start.
 
-The app monitors the sensor. On validated impact (3–5g + tilt), it plays countdown audio, logs the event payload, attempts GPS fix + GSM SMS alert, then exits for this phase.
+The app monitors the sensor. On validated impact (3–5g + tilt), it starts a 10-second countdown with buzzer beeps, allows cancellation (GPIO button or voice "cancel"), then attempts GPS fix + GSM SMS alert, and exits.
 
 ### Run from Terminal
 
 From Terminal (with venv activated):
 
 ```bash
-python -m src.main                   # Normal (with hardware)
-python -m src.main --action-cooldown-sec 10 --impact-log-cooldown-sec 1.0  # Tune debounce
-python -m src.main --dry-run         # Simulate without hardware
-python -m src.hardware_check  # One-shot hardware probe (exit 1 if any FAIL)
-python -m src.gsm_test            # GSM: multi-baud AT, SIM, registration, signal
-python -m src.gps_test            # GPS: auto baud, NMEA stream, $GPGGA fixes
-python -m src.main --test-alert      # Force impact path: play countdown audio then exit (bench)
-python -m src.audio_test --track 1  # Play DFPlayer track 1 (mp3/0001.mp3 layout)
-python -m src.mp3_diag             # Full MP3-TF-16P diagnostic (reset, play, queries)
-python -m src.mic_test             # Mic: listen until Ctrl+C, log RMS above threshold
-python -m src.mpu_collision_test     # Isolated MPU tap/collision test (JSONL: collisions + summary by default)
+python -m src.main                               # Normal (with hardware)
+python -m src.main --dry-run                     # Simulate without hardware
+python -m src.main --test-alert                  # Full alert cycle immediately (bench test)
+python -m src.main --test-alert --disable-sms-send  # Alert without sending SMS
+python -m src.main --core-flow-only              # Sensor monitoring only; no alert action
+python -m src.hardware_check                     # One-shot hardware probe (exit 1 if any FAIL)
+python -m src.gsm_test                           # GSM: multi-baud AT, SIM, registration, signal
+python -m src.gps_test                           # GPS: auto baud, NMEA stream, $GPGGA fixes
+python -m src.audio_test --track 1               # Play DFPlayer track 1 (mp3/0001.mp3 layout)
+python -m src.mp3_diag                           # Full MP3-TF-16P diagnostic (reset, play, queries)
+python -m src.mic_test --baseline                # Measure ambient noise; suggest RMS thresholds
+python -m src.mic_test --keyword-test --keyword cancel  # Test Google STT keyword detection
+python -m src.mic_stt_oneshot                    # One-shot STT check (flac, internet, mic)
+python -m src.buzzer_diag                        # Buzzer polarity scan and GPIO sweep
+python -m src.buzzer_silence                     # Silence buzzer GPIO immediately
+python -m src.mpu_collision_test                 # Isolated MPU tap/collision test (JSONL)
 ```
 
 `--trigger` still works as a hidden alias for `--test-alert` (same behavior).
@@ -206,7 +212,9 @@ python -m src.mpu_collision_test     # Isolated MPU tap/collision test (JSONL: c
 
 Thonny and manual `python -m src.main` are for development. On the helmet, use **systemd** so SmartShell **starts when the Pi boots** and **restarts after a crash**.
 
-1. Copy the example unit and **edit** `User`, `WorkingDirectory`, and `ExecStart` to match your Pi user and project path (venv Python path must be correct):
+### Main app service
+
+1. Copy the example unit and **edit** `User`, `WorkingDirectory`, and `ExecStart` to match your Pi username and project path:
 
    ```bash
    sudo cp deploy/smartshell.service.example /etc/systemd/system/smartshell.service
@@ -214,7 +222,7 @@ Thonny and manual `python -m src.main` are for development. On the helmet, use *
    ```
 
 2. Ensure the service user is in **`gpio`** and **`dialout`** (serial):  
-   `sudo usermod -aG gpio,dialout pi` then log out and back in (see `docs/phase0_os_checklist.md`).
+   `sudo usermod -aG gpio,dialout $USER` then log out and back in.
 
 3. Enable and start:
 
@@ -226,16 +234,35 @@ Thonny and manual `python -m src.main` are for development. On the helmet, use *
 
 4. Follow logs: `journalctl -u smartshell.service -f`
 
+### Buzzer silence service (required if buzzer is wired)
+
+GPIO 18 floats HIGH at boot, turning on the buzzer before Python starts. Install a oneshot service that runs earlier:
+
+```bash
+sudo cp deploy/smartshell-buzzer-silence.service.example \
+        /etc/systemd/system/smartshell-buzzer-silence.service
+sudo nano /etc/systemd/system/smartshell-buzzer-silence.service   # fix User / paths
+sudo systemctl daemon-reload
+sudo systemctl enable smartshell-buzzer-silence.service
+sudo systemctl start smartshell-buzzer-silence.service
+sudo systemctl status smartshell-buzzer-silence.service
+```
+
 Full product hardening (watchdogs, incoming-SMS responder loop) stays in later phases; see `docs/PLAN.md`.
 
 ---
 
 ## What’s in this repo today
 
-- `src/main.py`: runnable entrypoint (Phase 1)
-- `deploy/smartshell.service.example`: template `systemd` unit for boot autostart
-- `docs/PLAN.md`: phased plan and wiring
-- `docs/hardware.md`: prototype BOM, pins, power (matches physical build)
-- `docs/software_state.md`: module map, serial/GPS notes, Phase 2+ gaps
-- `docs/features/`: per-feature documentation
+- `src/main.py` — runnable entrypoint (Phase 1): impact detection → countdown → cancel window → GPS + SMS
+- `src/voice_cancel.py` — background Google STT keyword cancel (“cancel” to abort countdown)
+- `src/buzzer_hw.py` — countdown tick beeps on GPIO 18
+- `src/buzzer_silence.py` — boot-time GPIO 18 silence script
+- `src/cancel.py` — GPIO 17 cancel button
+- `deploy/smartshell.service.example` — `systemd` unit for main app boot autostart
+- `deploy/smartshell-buzzer-silence.service.example` — `systemd` oneshot for buzzer silence at boot
+- `docs/PLAN.md` — phased plan and wiring
+- `docs/hardware.md` — prototype BOM, pins, power (matches physical build)
+- `docs/software_state.md` — module map, serial/GPS notes, Phase 2+ gaps
+- `docs/features/` — per-feature documentation (buzzer, voice cancel, cancel mechanism, etc.)
 

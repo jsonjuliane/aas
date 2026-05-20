@@ -10,17 +10,19 @@
 
 [Unit]
 Description=SmartShell accident alert (Phase 1)
-After=network-online.target
+After=network-online.target smartshell-buzzer-silence.service
 Wants=network-online.target
+# Uncomment the next line once smartshell-buzzer-silence.service is enabled:
+# Requires=smartshell-buzzer-silence.service
 
 [Service]
 Type=simple
-User=pi
-Group=pi
+User=smartshell
+Group=smartshell
 SupplementaryGroups=gpio dialout
-WorkingDirectory=/home/pi/AccidentAlertSystem
+WorkingDirectory=/home/smartshell/AccidentAlertSystem
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/pi/AccidentAlertSystem/.venv/bin/python -m src.main
+ExecStart=/home/smartshell/AccidentAlertSystem/.venv/bin/python -m src.main
 Restart=on-failure
 RestartSec=5
 

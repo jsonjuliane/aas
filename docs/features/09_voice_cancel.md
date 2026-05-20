@@ -1,0 +1,92 @@
+# Feature: Voice Keyword Cancel
+
+## Overview
+
+During the 10-second countdown, saying **"cancel"** (or a configured keyword) into a USB microphone aborts the alert. The system uses Google Speech-to-Text via the `SpeechRecognition` library.
+
+Voice cancel runs **in parallel** with the GPIO button; whichever fires first wins.
+
+---
+
+## Requirements
+
+| Requirement | Detail |
+|-------------|--------|
+| USB microphone | Any USB Audio Device recognised by ALSA (e.g. USB dongle mic) |
+| Internet | Google STT sends audio to Google's servers for transcription |
+| `flac` | OS-level dependency; install once: `sudo apt install -y flac` |
+| `SpeechRecognition` | Python package; included in `requirements.txt` |
+| `pyaudio` | Python package; included in `requirements.txt` |
+
+---
+
+## How it works
+
+1. At the start of each alert, `voice_cancel.open_keyword_session()` opens the microphone and calibrates ambient noise for `VOICE_AMBIENT_CALIBRATION_SEC` seconds.
+2. `voice_cancel.start_background_keyword_listen()` spawns a background thread that continuously listens for speech above `VOICE_KEYWORD_MIN_RMS`.
+3. Each captured utterance is sent to Google STT. If the transcript contains the keyword, `session.cancel_requested` is set to `True`.
+4. `main.py` checks `session.cancel_requested` each second of the countdown window.
+5. On keyword match — or on countdown timeout — `voice_cancel.close_keyword_session()` stops the listener and releases the mic.
+
+---
+
+## Config (`src/config.py`)
+
+| Constant | Default | Description |
+|----------|---------|-------------|
+| `VOICE_CANCEL_KEYWORD_ENABLED` | `True` | Enable voice keyword cancel |
+| `VOICE_CANCEL_SOUND_ENABLED` | `False` | Enable RMS-level cancel (loud noise = cancel) |
+| `VOICE_KEYWORD_MIN_RMS` | `6500` | Skip STT for frames quieter than this (reduces cloud calls on idle) |
+| `VOICE_SOUND_RMS_THRESHOLD` | `10000` | RMS threshold for sound-level cancel |
+| `VOICE_KEYWORD_PHRASE_SEC` | `2.0` | Max seconds per STT utterance |
+| `VOICE_AMBIENT_CALIBRATION_SEC` | `1.0` | Ambient noise calibration duration |
+
+### Tuning thresholds
+
+Run a baseline measurement first:
+
+```bash
+python -m src.mic_test --baseline
+```
+
+This prints `Suggested VOICE_SOUND_RMS_THRESHOLD` and `Suggested VOICE_KEYWORD_MIN_RMS` for your specific mic and environment. Update `config.py` with those values.
+
+---
+
+## Bench tests
+
+```bash
+# Ambient noise baseline + threshold suggestions
+python -m src.mic_test --baseline
+
+# 15-second live keyword detection test
+python -m src.mic_test --keyword-test --keyword cancel
+
+# One-shot STT check: flac, internet, mic, transcription
+python -m src.mic_stt_oneshot
+
+# Full alert cycle (test voice cancel end-to-end)
+python -m src.main --test-alert
+```
+
+---
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| `recognition error` | Install `flac`: `sudo apt install -y flac` |
+| `SpeechRecognition not installed` | `pip install SpeechRecognition` |
+| Keyword never matched | Run `--baseline`; ensure speech RMS exceeds `VOICE_KEYWORD_MIN_RMS` |
+| Constant `[Mic] Sound detected` without speech | Lower `VOICE_SOUND_RMS_THRESHOLD` or increase mic distance from noise source |
+| `AssertionError: already inside context manager` | Fixed in `voice_cancel.py`; ensure mic is opened through `open_keyword_session` only |
+
+---
+
+## References
+
+- `src/voice_cancel.py` — session open/close, background listener
+- `src/mic_test.py` — baseline, keyword-test, RMS monitor
+- `src/mic_stt_oneshot.py` — one-shot STT verification
+- `src/config.py` — `VOICE_*` constants
+- `docs/features/06_cancel.md` — full cancel mechanism (button + voice)

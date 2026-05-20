@@ -17,8 +17,8 @@ Build an IoT-based smart helmet system that:
 ## Functional requirements (baseline)
 
 1. **Accident detection**: Detect sudden impacts using MPU-6050 (acceleration + rotation/orientation).
-2. **Countdown**: Start a **5-second** alert countdown with pre-recorded audio.
-3. **Cancel**: Listen for voice command “cancel” during the 5 seconds; if heard, stop alert and resume monitoring.
+2. **Countdown**: Start a **10-second** alert countdown with audible cues (buzzer) and optional pre-recorded audio.
+3. **Cancel**: Listen for GPIO button press or voice command "cancel" during the 10 seconds; if received, stop alert and abort SMS.
 4. **If not cancelled**: Obtain GPS coordinates and send SMS alerts via SIM800L.
 5. **Location routing**: If inside Biñan → **Family + Barangay (accident location) + Barangay (subject's home)**; if outside → **Family + Barangay (subject's home)**.
 6. **Incoming SMS responder loop**: Process incoming responder texts for acknowledgment / workflow state.
@@ -34,15 +34,15 @@ Build an IoT-based smart helmet system that:
 - **Monitoring**: continuously read motion data; apply multi-sensor logic
 - **Threshold**: acceleration spike (e.g., \( \ge 3g\)–\(5g\)) flags potential accident
 - **Validation**: confirm using both acceleration spike + abnormal tilt/orientation
-- **Countdown**: play voice alert, start 5-second timer
-- **Cancel window**: listen for “cancel”; if none, proceed
+- **Countdown**: play audible cues, start 10-second timer
+- **Cancel window**: GPIO button or voice "cancel"; if neither fires, proceed
 - **Send alert**: SMS to registered contacts including GPS coordinates
 - **Log event**
 - **Responder loop**: processes incoming Barangay messages for workflow state
 
 ### B. False detection (cancelled)
 
-- Trigger threshold from bump/drop/sudden motion → countdown starts → user says “cancel” → recognition succeeds → stop countdown → no SMS → resume monitoring
+- Trigger threshold from bump/drop/sudden motion → countdown starts → user presses button or says "cancel" → cancel detected → stop countdown → no SMS → process exits
 
 ---
 
@@ -98,7 +98,7 @@ The repo is a **runnable Phase 1 application** on Raspberry Pi OS when hardware 
 - Run: `python -m src.main` (or open `src/main.py` in Thonny); `--dry-run` for no hardware; **`deploy/smartshell.service.example`** for boot autostart
 
 **Documented now:** example **`systemd`** unit → `deploy/smartshell.service.example` and `README.md` (boot autostart).  
-**Still planned (later phases):** barangay routing in code, voice cancel, responder loop hardening, watchdogs — see phases below.
+**Still planned (later phases):** barangay routing in code, responder loop hardening, watchdogs — see phases below.
 
 ---
 
@@ -158,7 +158,7 @@ The repo is a **runnable Phase 1 application** on Raspberry Pi OS when hardware 
 
 - **Exit criteria (demo)**
   - Simulated impact (or `--test-alert` / legacy `--trigger`) reliably starts countdown
-  - Cancel within 5 seconds prevents SMS every time
+  - Cancel (button or voice) within 10 seconds prevents SMS every time
   - No cancel sends SMS with valid coordinates (or “no fix” fallback message) every time
   - Log file records event metadata for each run
 
@@ -284,7 +284,7 @@ AccidentAlertSystem/
 ## Acceptance tests (what “working” means)
 
 - **Accident trigger**: real impacts or `--test-alert` cause countdown reliably, without random triggers at rest.
-- **Cancel**: cancel within 5 seconds reliably stops the alert sequence.
+- **Cancel**: cancel (button or voice) within 10 seconds reliably stops the alert sequence.
 - **Alert**: no cancel sends SMS with:
   - timestamp
   - coordinates (or explicit “GPS not available”)

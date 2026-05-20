@@ -27,9 +27,6 @@ def send_at(ser: Any, cmd: str, timeout: float = 2.0) -> str:
     return "".join(buf)
 
 
-# Backward-compatible alias
-_send_at = send_at
-
 
 def _extract_cms_error_code(resp: str) -> int | None:
     """Extract +CMS ERROR numeric code from modem response if present."""
