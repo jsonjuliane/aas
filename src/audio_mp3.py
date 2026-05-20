@@ -489,11 +489,3 @@ class AudioMP3:
         return frame
 
 
-def _dfplayer_play_packet(track: int) -> bytes:
-    """Build DFPlayer play packet for a track."""
-    return _dfplayer_packet(command=0x03, param=max(1, int(track)), feedback=0)
-
-
-def _dfplayer_stop_packet() -> bytes:
-    """Build DFPlayer stop packet."""
-    return _dfplayer_packet(command=0x16, param=0, feedback=0)

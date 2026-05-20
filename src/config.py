@@ -68,7 +68,6 @@ ACCEL_THRESHOLD_G_MAX = 5.0  # Upper bound for validation
 TILT_DELTA_THRESHOLD_G = 1.5  # Baseline delta required to validate true collision
 ACTION_COOLDOWN_SEC = 8.0  # Debounce action flow after a true collision
 IMPACT_LOG_COOLDOWN_SEC = 0.75  # Debounce impact candidate logs in main loop
-# Temporary longer cancel window for field testing (restore to 5 when stable).
 COUNTDOWN_SECONDS = 10
 
 # Voice / mic cancel during countdown
@@ -84,8 +83,6 @@ VOICE_SOUND_CHUNK_SIZE = 512
 VOICE_AMBIENT_CALIBRATION_SEC = 1.0  # adjust_for_ambient_noise once per alert
 VOICE_KEYWORD_PHRASE_SEC = 2.0  # max seconds per utterance ("cancel")
 VOICE_KEYWORD_MIN_RMS = 6500  # skip cloud STT below this (idle p95 ~6.2k on bench USB mic)
-VOICE_KEYWORD_LOG_QUIET = False  # if True, log every listen timeout (noisy)
-
 GPS_COLLISION_FIX_TIMEOUT_SEC = 8.0
 GSM_WAIT_REGISTER_SEC = 30.0  # Max wait for network registration before SMS send
 GSM_WAIT_POLL_SEC = 2.0  # Poll interval while waiting for GSM readiness
@@ -96,7 +93,8 @@ GSM_SEND_RETRY_BACKOFF_SEC = 4.0  # Delay between SMS retries for same recipient
 # Paths (relative to project root)
 CONFIG_DIR = "config"
 CONTACTS_FAMILY_FILE = "contacts.family.json"
+LOGS_DIR = "logs"
+
+# Phase 2 placeholders (routing / geofence — not used yet)
 CONTACTS_BARANGAY_FILE = "contacts.barangay.json"
 GEOFENCE_BINAN_FILE = "geofence.binan.json"
-ASSETS_AUDIO_DIR = "assets/audio"
-LOGS_DIR = "logs"
