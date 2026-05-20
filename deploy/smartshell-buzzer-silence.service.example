@@ -1,0 +1,38 @@
+# SmartShell — buzzer silence at boot (runs before main app).
+#
+# Immediately drives the buzzer GPIO to the silent level so a floating pin
+# does not leave the buzzer sounding from power-up until the main app starts.
+#
+# Setup:
+#   sudo cp deploy/smartshell-buzzer-silence.service.example \
+#            /etc/systemd/system/smartshell-buzzer-silence.service
+#   sudo nano /etc/systemd/system/smartshell-buzzer-silence.service   # fix User / paths
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable smartshell-buzzer-silence.service
+#
+# Optional confirmation beep on boot: change ExecStart to add --beep
+#
+# After setting up the main app service (smartshell.service), make it depend on
+# this one by ensuring smartshell.service has:
+#   After=smartshell-buzzer-silence.service
+#   Requires=smartshell-buzzer-silence.service
+#
+# Logs: journalctl -u smartshell-buzzer-silence.service
+
+[Unit]
+Description=SmartShell buzzer GPIO silence on startup
+DefaultDependencies=no
+After=sysinit.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=smartshell
+Group=smartshell
+SupplementaryGroups=gpio
+WorkingDirectory=/home/smartshell/AccidentAlertSystem
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/smartshell/AccidentAlertSystem/.venv/bin/python -m src.buzzer_silence
+
+[Install]
+WantedBy=multi-user.target
