@@ -34,7 +34,6 @@ def _export_pin(pin: int) -> bool:
     if not gpio_dir.exists():
         try:
             Path("/sys/class/gpio/export").write_text(str(pin))
-            # brief wait for sysfs to create the directory
             deadline = time.monotonic() + 1.0
             while not gpio_dir.exists() and time.monotonic() < deadline:
                 time.sleep(0.05)
@@ -45,10 +44,19 @@ def _export_pin(pin: int) -> bool:
                 file=sys.stderr,
             )
             return False
+        except OSError as e:
+            if e.errno == 22:
+                # EINVAL: pin already exported/claimed by another driver (e.g. pigpiod, PWM).
+                # The sysfs directory may still be usable; try to continue.
+                pass
+            else:
+                print(f"[buzzer-silence] Export failed: {e}", file=sys.stderr)
+                return False
         except Exception as e:
             print(f"[buzzer-silence] Export failed: {e}", file=sys.stderr)
             return False
-    return gpio_dir.exists()
+    # Even if export returned EINVAL, directory may exist; fall through to RPi.GPIO fallback.
+    return True  # attempt direction/value write regardless
 
 
 def silence_via_sysfs(pin: int, silent_level: int) -> bool:
@@ -56,31 +64,86 @@ def silence_via_sysfs(pin: int, silent_level: int) -> bool:
     Set GPIO pin to output and drive to silent_level (0=LOW, 1=HIGH).
     State persists after process exits.
     """
-    if not _export_pin(pin):
-        return False
+    _export_pin(pin)  # best-effort; continue even on EINVAL
 
     gpio_dir = _sysfs_gpio_dir(pin)
+    if gpio_dir.exists():
+        try:
+            _sysfs_write(gpio_dir / "direction", "out")
+            _sysfs_write(gpio_dir / "value", str(silent_level))
+            return True
+        except Exception as e:
+            print(f"[buzzer-silence] sysfs write failed: {e}", file=sys.stderr)
+
+    # Fallback 1: raspi-gpio CLI (pre-installed on Pi OS Bullseye+)
+    if _silence_via_raspi_gpio(pin, silent_level):
+        return True
+
+    # Fallback 2: RPi.GPIO (pin resets on exit but better than nothing)
+    return _silence_via_rpigpio(pin, silent_level)
+
+
+def _silence_via_raspi_gpio(pin: int, silent_level: int) -> bool:
+    """Use raspi-gpio CLI to set pin output level (state persists)."""
+    import shutil, subprocess
+    if not shutil.which("raspi-gpio"):
+        return False
+    level_str = "dh" if silent_level else "dl"  # drive high / drive low
     try:
-        _sysfs_write(gpio_dir / "direction", "out")
-        _sysfs_write(gpio_dir / "value", str(silent_level))
+        result = subprocess.run(
+            ["raspi-gpio", "set", str(pin), "op", level_str],
+            capture_output=True, timeout=3,
+        )
+        if result.returncode == 0:
+            print(f"[buzzer-silence] raspi-gpio: GPIO{pin} set to {'HIGH' if silent_level else 'LOW'}.")
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _silence_via_rpigpio(pin: int, silent_level: int) -> bool:
+    """Last-resort RPi.GPIO (note: pin resets on process exit)."""
+    try:
+        import RPi.GPIO as GPIO
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setwarnings(False)
+        GPIO.setup(pin, GPIO.OUT)
+        GPIO.output(pin, GPIO.HIGH if silent_level else GPIO.LOW)
+        print(
+            f"[buzzer-silence] RPi.GPIO: GPIO{pin} set. "
+            "(Note: pin resets when this process exits — add pull-down resistor for permanent fix.)"
+        )
         return True
     except Exception as e:
-        print(f"[buzzer-silence] sysfs write failed: {e}", file=sys.stderr)
+        print(f"[buzzer-silence] RPi.GPIO fallback failed: {e}", file=sys.stderr)
         return False
 
 
 def beep_via_sysfs(pin: int, on_level: int, silent_level: int, duration_sec: float) -> bool:
-    if not _export_pin(pin):
-        return False
+    _export_pin(pin)
     gpio_dir = _sysfs_gpio_dir(pin)
+    if gpio_dir.exists():
+        try:
+            _sysfs_write(gpio_dir / "direction", "out")
+            _sysfs_write(gpio_dir / "value", str(on_level))
+            time.sleep(max(0.05, duration_sec))
+            _sysfs_write(gpio_dir / "value", str(silent_level))
+            return True
+        except Exception as e:
+            print(f"[buzzer-silence] beep failed: {e}", file=sys.stderr)
+    # fallback: RPi.GPIO beep
     try:
-        _sysfs_write(gpio_dir / "direction", "out")
-        _sysfs_write(gpio_dir / "value", str(on_level))
+        import RPi.GPIO as GPIO
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setwarnings(False)
+        GPIO.setup(pin, GPIO.OUT)
+        GPIO.output(pin, GPIO.HIGH if on_level else GPIO.LOW)
         time.sleep(max(0.05, duration_sec))
-        _sysfs_write(gpio_dir / "value", str(silent_level))
+        GPIO.output(pin, GPIO.HIGH if silent_level else GPIO.LOW)
         return True
     except Exception as e:
-        print(f"[buzzer-silence] beep failed: {e}", file=sys.stderr)
+        print(f"[buzzer-silence] beep fallback failed: {e}", file=sys.stderr)
         return False
 
 
