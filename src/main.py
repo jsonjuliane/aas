@@ -290,8 +290,9 @@ def run(
         if not dry_run:
             sensor.calibrate()
             cancel.init()
-            buzzer_hw.silence()
         audio_mod.open()
+        if not dry_run:
+            buzzer_hw.silence()
         _print_init_status(
             dry_run=dry_run,
             core_flow_only=core_flow_only,
