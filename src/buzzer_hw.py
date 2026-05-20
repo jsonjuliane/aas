@@ -1,8 +1,11 @@
 """
 GPIO buzzer helper for countdown fallback cues.
 
-Uses a simple on/off pin drive via a transistor or active buzzer module.
-If silence behaves inverted, set BUZZER_ACTIVE_HIGH=False in src/config.py.
+Each function sets up the pin, drives it, then calls GPIO.cleanup() — matching
+the approach confirmed working in buzzer_silence.py. Cleanup returns the pin to
+input mode; the buzzer module's internal pull keeps it silent between beeps.
+
+If buzzer behavior is inverted, set BUZZER_ACTIVE_HIGH=False in src/config.py.
 """
 
 from __future__ import annotations
@@ -10,75 +13,77 @@ from __future__ import annotations
 import time
 
 
-def _levels() -> tuple[int, int] | None:
-    """Return (on_level, off_level) for configured buzzer polarity."""
+def _gpio_setup() -> tuple | None:
+    """
+    Return (GPIO, pin, on_level, off_level) or None if RPi.GPIO unavailable.
+    """
     try:
         import RPi.GPIO as GPIO
     except ImportError:
         return None
 
-    from src.config import BUZZER_ACTIVE_HIGH
+    from src.config import BUZZER_ACTIVE_HIGH, BUZZER_GPIO
 
-    on = GPIO.HIGH if BUZZER_ACTIVE_HIGH else GPIO.LOW
-    off = GPIO.LOW if BUZZER_ACTIVE_HIGH else GPIO.HIGH
-    return on, off
+    on  = GPIO.HIGH if BUZZER_ACTIVE_HIGH else GPIO.LOW
+    off = GPIO.LOW  if BUZZER_ACTIVE_HIGH else GPIO.HIGH
+
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setwarnings(False)
+    GPIO.setup(BUZZER_GPIO, GPIO.OUT)
+
+    return GPIO, BUZZER_GPIO, on, off
 
 
 def silence() -> bool:
-    """Drive buzzer GPIO to the silent level. Returns False if GPIO unavailable."""
-    levels = _levels()
-    if levels is None:
+    """
+    Drive buzzer to silent level then cleanup.
+    Same pattern as buzzer_silence.py which is confirmed working.
+    """
+    result = _gpio_setup()
+    if result is None:
         return False
 
+    GPIO, pin, _on, off = result
     try:
-        import RPi.GPIO as GPIO
-        from src.config import BUZZER_GPIO
-
-        _on, off = levels
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setwarnings(False)
-        GPIO.setup(BUZZER_GPIO, GPIO.OUT)
-        GPIO.output(BUZZER_GPIO, off)
+        GPIO.output(pin, off)
         return True
     except Exception:
         return False
+    finally:
+        GPIO.cleanup(pin)
 
 
 def beep(duration_sec: float = 0.08) -> bool:
-    """Drive buzzer ON briefly, then OFF. Returns False if GPIO unavailable."""
-    levels = _levels()
-    if levels is None:
+    """
+    Beep once: ON for duration_sec then OFF, then cleanup.
+    """
+    result = _gpio_setup()
+    if result is None:
         return False
 
+    GPIO, pin, on, off = result
     duration_sec = max(0.02, float(duration_sec))
     try:
-        import RPi.GPIO as GPIO
-        from src.config import BUZZER_GPIO
-
-        on, off = levels
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setwarnings(False)
-        GPIO.setup(BUZZER_GPIO, GPIO.OUT)
-        GPIO.output(BUZZER_GPIO, on)
+        GPIO.output(pin, on)
         time.sleep(duration_sec)
-        GPIO.output(BUZZER_GPIO, off)
+        GPIO.output(pin, off)
         return True
     except Exception:
-        try:
-            silence()
-        except Exception:
-            pass
         return False
+    finally:
+        GPIO.cleanup(pin)
 
 
 def countdown_tick_beep(seconds_remaining: int) -> bool:
-    """Beep pattern for countdown: short beep per second, longer on final 3s."""
-    from src.config import BUZZER_BEEP_SEC, BUZZER_FINAL_BEEP_SEC, BUZZER_COUNTDOWN_ENABLED
+    """
+    One beep per countdown second.
+    Short beep for seconds > 3; slightly longer for final 3 seconds.
+    """
+    from src.config import BUZZER_BEEP_SEC, BUZZER_COUNTDOWN_ENABLED, BUZZER_FINAL_BEEP_SEC
 
     if not BUZZER_COUNTDOWN_ENABLED:
         return False
 
-    sec = int(seconds_remaining)
-    if sec <= 3:
+    if int(seconds_remaining) <= 3:
         return beep(BUZZER_FINAL_BEEP_SEC)
     return beep(BUZZER_BEEP_SEC)

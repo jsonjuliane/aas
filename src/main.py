@@ -419,6 +419,8 @@ def run(
     finally:
         sensor.close()
         audio_mod.close()
+        if not dry_run:
+            buzzer_hw.silence()
 
 
 def _handle_alert(
