@@ -11,13 +11,21 @@ import json
 from src.config import CONFIG_DIR, CONTACTS_FAMILY_FILE, PROJECT_ROOT
 
 
-def load_family_contacts() -> tuple[list[str], str]:
+_DEFAULT_TEMPLATE = (
+    "SMARTSHELL UPDATE: COLLISION DETECTED\n"
+    "Name: {name}\n"
+    "Date: {date}\n"
+    "Google Map: {map_url}"
+)
+
+
+def load_family_contacts() -> tuple[list[str], str, str]:
     """
-    Load family contacts and message template.
+    Load family contacts, message template, and rider name.
 
     Returns:
-        Tuple of (list of phone numbers in priority order, message_template).
-        Placeholders in template: {lat}, {lon}, {timestamp}.
+        Tuple of (list of phone numbers in priority order, message_template, rider_name).
+        Placeholders in template: {name}, {date}, {map_url}.
 
     Raises:
         FileNotFoundError: If contacts file not found.
@@ -38,28 +46,34 @@ def load_family_contacts() -> tuple[list[str], str]:
         c["phone"]
         for c in sorted(contacts, key=lambda x: x.get("priority", 999))
     ]
-    template = data.get(
-        "message_template",
-        "ALERT: Possible accident. Location: {lat}, {lon} at {timestamp}.",
-    )
-    return phones, template
+    template = data.get("message_template", _DEFAULT_TEMPLATE)
+    rider_name = data.get("rider_name", "Unknown")
+    return phones, template, rider_name
 
 
-def format_message(template: str, lat: float | None, lon: float | None) -> str:
+def format_message(
+    template: str,
+    lat: float | None,
+    lon: float | None,
+    rider_name: str = "Unknown",
+) -> str:
     """
-    Format message with lat, lon, timestamp.
+    Format message with rider name, date, and Google Maps link.
 
     Args:
-        template: Template with {lat}, {lon}, {timestamp}.
+        template: Template with {name}, {date}, {map_url}.
         lat: Latitude or None.
         lon: Longitude or None.
+        rider_name: Name of the rider/device owner.
 
     Returns:
         Formatted message string.
     """
     from datetime import datetime
 
-    lat_str = f"{lat:.6f}" if lat is not None else "N/A"
-    lon_str = f"{lon:.6f}" if lon is not None else "N/A"
-    ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-    return template.format(lat=lat_str, lon=lon_str, timestamp=ts)
+    if lat is not None and lon is not None:
+        map_url = f"https://maps.google.com/?q={lat:.6f},{lon:.6f}"
+    else:
+        map_url = "N/A"
+    date_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    return template.format(name=rider_name, date=date_str, map_url=map_url)

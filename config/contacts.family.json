@@ -8,5 +8,6 @@
       "priority": 1
     }
   ],
-  "message_template": "ALERT: Possible accident. Rider may need help. Location: {lat}, {lon} at {timestamp}. Reply to confirm."
+  "rider_name": "Rider Name",
+  "message_template": "SMARTSHELL UPDATE: COLLISION DETECTED\nName: {name}\nDate: {date}\nGoogle Map: {map_url}"
 }
