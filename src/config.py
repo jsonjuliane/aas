@@ -53,7 +53,7 @@ CANCEL_BUTTON_GPIO = 17  # Wire momentary switch between GPIO17 and GND
 
 # Optional buzzer fallback for countdown cues (GPIO -> transistor/active buzzer)
 BUZZER_GPIO = 18
-BUZZER_ACTIVE_HIGH = True  # Set False if your driver logic is inverted
+BUZZER_ACTIVE_HIGH = False  # Active-low buzzer module (buzzes LOW, silent HIGH)
 BUZZER_COUNTDOWN_ENABLED = True
 BUZZER_BEEP_SEC = 0.08
 BUZZER_FINAL_BEEP_SEC = 0.16
