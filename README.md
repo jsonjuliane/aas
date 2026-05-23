@@ -97,10 +97,11 @@ This repo already includes `requirements.txt`. Expect additional system packages
 - `portaudio` development headers — needed by `pyaudio` (voice cancel / mic test)
 - `pigpio` — GPIO software UART for GPS/MP3 on breadboard GPIO pins
 - `flac` — needed by Google Speech-to-Text (voice keyword cancel)
+- `libgeos-dev` — GEOS C library for `shapely` (Biñan geofence / `routing_test`)
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y python3-venv python3-pip portaudio19-dev pigpio python3-pigpio flac
+sudo apt-get install -y python3-venv python3-pip portaudio19-dev pigpio python3-pigpio flac libgeos-dev
 sudo systemctl enable --now pigpiod
 ```
 

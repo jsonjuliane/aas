@@ -26,7 +26,7 @@
 
 1. **OS:** I2C on; serial console **off** on primary UART; SIM on `/dev/serial0`.  
 2. **Dependencies:** `pip install -r requirements.txt` on the Pi (`RPi.GPIO`, `smbus2`, `pyserial`, …).  
-   OS-level: `sudo apt install -y flac pigpio python3-pigpio portaudio19-dev`
+   OS-level: `sudo apt install -y flac pigpio python3-pigpio portaudio19-dev libgeos-dev` (GEOS required for `shapely` / routing)
 3. **Config:** `config/contacts.family.json` exists with valid numbers; optional `subject_home_barangay` for future routing.  
 4. **Serial paths:** **`GPS_SERIAL_PORT=None`** and **`MP3_SERIAL_PORT=None`** use pigpio GPIO software UART (GPS on GPIO20/21, MP3 TX on GPIO19). If using USB adapters, set to `/dev/ttyUSB*`. Do not point GPS and GSM at the same `ttyS0`.  
 5. **Cancel button:** Wire a momentary switch to **GPIO 17** + GND (or change `CANCEL_BUTTON_GPIO`).  

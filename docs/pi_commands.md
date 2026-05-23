@@ -4,6 +4,19 @@ Run these from a terminal on the Pi. **Use the same Python you installed depende
 
 ---
 
+## One-time OS packages (Pi)
+
+`shapely` (routing / geofence) needs the GEOS system library. If `routing_test` fails with `libgeos_c.so.1: cannot open shared object file`:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y libgeos-dev
+```
+
+Then reinstall Python deps in your venv: `pip install -r requirements.txt`
+
+---
+
 ## Project + venv
 
 ```bash

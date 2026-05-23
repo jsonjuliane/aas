@@ -1,11 +1,21 @@
 {
-  "_comment": "Copy to contacts.family.json and fill in real numbers. Do not commit contacts.family.json.",
+  "_comment": "Family/emergency SMS recipients. Do not share publicly.",
   "version": 1,
   "contacts": [
     {
       "name": "Primary contact",
       "phone": "09217679405",
       "priority": 1
+    },
+    {
+      "name": "JM",
+      "phone": "09202828670",
+      "priority": 2
+    },
+    {
+      "name": "Juls",
+      "phone": "09278222260",
+      "priority": 3
     }
   ],
   "rider_name": "Juan Dela Cruz",
