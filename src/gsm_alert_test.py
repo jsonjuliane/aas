@@ -5,7 +5,12 @@ Unit tests for GSM alert policy — run: python -m src.gsm_alert_test
 from __future__ import annotations
 
 from src.gsm_alert import is_usable_csq, not_ready_reason, probe_csq, probe_sms_ready
-from src.contacts import format_alert_message, message_parts_for_delivery, split_message_for_sms
+from src.contacts import (
+    format_alert_message,
+    message_parts_for_delivery,
+    sms_safe_for_gsm7,
+    split_message_for_sms,
+)
 from src.gsm_sim800l import _cmgs_submit_ok, _cmgs_submit_timeout_sec
 
 
@@ -56,6 +61,8 @@ def main() -> int:
         accident_barangay="Sto. Domingo",
     )
     _check("compact alert fits one part", len(compact) <= 160)
+    _check("binan ascii safe", "ñ" not in compact and "Inside Binan" in compact)
+    _check("sms_safe strips ntilde", sms_safe_for_gsm7("Inside Biñan") == "Inside Binan")
     parts = message_parts_for_delivery("x" * 200)
     _check("split long body", len(parts) >= 2)
     _check("split parts fit limit", all(len(p) <= 160 for p in split_message_for_sms("x" * 200)))
