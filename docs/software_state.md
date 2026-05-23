@@ -16,7 +16,7 @@
 | **Logging** | `logging_store.py` | — | Appends JSON lines under `logs/`. |
 | **Config** | `config.py` | Pin + path constants | Single place for GPIO, baud, serial device paths, voice/buzzer thresholds. |
 
-**Phase 2 (not in `src` yet):** barangay routing, geofence, `contacts.barangay.json` logic.
+**Phase 2 (partial):** Biñan geofence + inside/outside in SMS/logs (`src/routing.py`, `config/geofence.binan.json`). Barangay recipient routing not wired yet.
 
 **Phase 4 (not in `src` yet):** responder loop enhancements, watchdogs. **Boot autostart:** use `deploy/smartshell.service.example` + `README.md` now.
 
@@ -50,7 +50,8 @@ Expected: continuous monitoring; 3–5g candidates are logged with flags; valida
 | Voice "cancel" | **Implemented** — background Google STT keyword listener in `voice_cancel.py`; requires internet and USB mic. |
 | Buzzer countdown | **Implemented** — GPIO18 active-high buzzer in `buzzer_hw.py`; tick beeps per second. |
 | MP3 countdown audio | Wired (`audio_mp3.py`); DFPlayer serial TX implemented; RX feedback path unreliable on hardware (level-shift issue). Reserved for future fix. |
-| Location routing (Biñan / home barangay) | Documented in `docs/`; **not** wired in `main.py` yet (Phase 2). |
+| Inside/outside Biñan (geofence) | **Implemented** — `routing.py`; SMS `Area:` line + `routing_decision` log. |
+| Barangay recipient routing | Documented; **not** wired in `main.py` yet (Phase 2 Step 2–3). |
 | Responder loop / incoming-SMS reply | Not implemented (Phase 4). |
 | GPIO UART for GPS/MP3 without `/dev/tty*` | Implemented via pigpio software UART; requires `pigpio` + running `pigpiod` service on the Pi. |
 

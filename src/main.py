@@ -787,7 +787,7 @@ def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool
         )
         return
     try:
-        phones, template, rider_name = contacts.load_family_contacts()
+        phones, template, rider_name, home_barangay = contacts.load_family_contacts()
     except Exception as e:
         reason = f"contacts_load_failed:{e}"
         print(f"GSM SMS skipped: {reason}")
@@ -816,7 +816,40 @@ def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool
 
     lat = float(location["lat"]) if location and location.get("lat") is not None else None
     lon = float(location["lon"]) if location and location.get("lon") is not None else None
-    message = contacts.format_message(template=template, lat=lat, lon=lon, rider_name=rider_name)
+
+    try:
+        from src import routing
+
+        route = routing.routing_decision(lat, lon)
+    except Exception as e:
+        route = {
+            "location_class": "unknown",
+            "area_label": "Unknown (geofence error)",
+            "inside_binan": None,
+            "lat": lat,
+            "lon": lon,
+            "error": str(e),
+        }
+        print(f"Routing geofence error: {e}")
+
+    area = str(route.get("area_label", "Unknown (no GPS)"))
+    print(f"Routing: {area} (class={route.get('location_class')}, lat={lat}, lon={lon})")
+    logging_store.log_event(
+        {
+            "event": "routing_decision",
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+            **route,
+        }
+    )
+
+    message = contacts.format_message(
+        template=template,
+        lat=lat,
+        lon=lon,
+        rider_name=rider_name,
+        home_barangay=home_barangay,
+        area=area,
+    )
 
     modem = gsm_sim800l.GSMSIM800L(dry_run=dry_run)
     sent = 0

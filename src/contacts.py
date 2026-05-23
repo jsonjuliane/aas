@@ -14,18 +14,20 @@ from src.config import CONFIG_DIR, CONTACTS_FAMILY_FILE, PROJECT_ROOT
 _DEFAULT_TEMPLATE = (
     "SMARTSHELL UPDATE: COLLISION DETECTED\n"
     "Name: {name}\n"
+    "Area: {area}\n"
+    "Home barangay: {home_barangay}\n"
     "Date: {date}\n"
     "Google Map: {map_url}"
 )
 
 
-def load_family_contacts() -> tuple[list[str], str, str]:
+def load_family_contacts() -> tuple[list[str], str, str, str]:
     """
-    Load family contacts, message template, and rider name.
+    Load family contacts, message template, rider name, and home barangay.
 
     Returns:
-        Tuple of (list of phone numbers in priority order, message_template, rider_name).
-        Placeholders in template: {name}, {date}, {map_url}.
+        Tuple of (phones, message_template, rider_name, subject_home_barangay).
+        Placeholders in template: {name}, {area}, {home_barangay}, {date}, {map_url}.
 
     Raises:
         FileNotFoundError: If contacts file not found.
@@ -48,7 +50,8 @@ def load_family_contacts() -> tuple[list[str], str, str]:
     ]
     template = data.get("message_template", _DEFAULT_TEMPLATE)
     rider_name = data.get("rider_name", "Unknown")
-    return phones, template, rider_name
+    home_barangay = data.get("subject_home_barangay", "Unknown")
+    return phones, template, rider_name, home_barangay
 
 
 def format_message(
@@ -56,15 +59,19 @@ def format_message(
     lat: float | None,
     lon: float | None,
     rider_name: str = "Unknown",
+    home_barangay: str = "Unknown",
+    area: str = "Unknown (no GPS)",
 ) -> str:
     """
-    Format message with rider name, date, and Google Maps link.
+    Format message with rider name, area, home barangay, date, and Google Maps link.
 
     Args:
-        template: Template with {name}, {date}, {map_url}.
+        template: Template with {name}, {area}, {home_barangay}, {date}, {map_url}.
         lat: Latitude or None.
         lon: Longitude or None.
         rider_name: Name of the rider/device owner.
+        home_barangay: Rider's residence barangay (subject_home_barangay from config).
+        area: Inside/outside Biñan label from routing.
 
     Returns:
         Formatted message string.
@@ -76,4 +83,12 @@ def format_message(
     else:
         map_url = "N/A"
     date_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-    return template.format(name=rider_name, date=date_str, map_url=map_url)
+    all_fields = {
+        "name": rider_name,
+        "area": area,
+        "home_barangay": home_barangay,
+        "date": date_str,
+        "map_url": map_url,
+    }
+    used = {key for key in all_fields if f"{{{key}}}" in template}
+    return template.format(**{k: all_fields[k] for k in used})

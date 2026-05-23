@@ -12,8 +12,8 @@ pyserial>=3.5
 SpeechRecognition>=3.10.0
 pyaudio>=0.2.13
 
-# Geofencing / geometry (Phase 2 — not used yet)
-# shapely>=2.0.0
+# Geofencing / geometry (Phase 2 — Biñan boundary)
+shapely>=2.0.0
 
 # GPIO (Raspberry Pi only; install fails on non-Pi)
 RPi.GPIO>=0.7.0

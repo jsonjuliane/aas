@@ -8,6 +8,7 @@
       "priority": 1
     }
   ],
-  "rider_name": "Rider Name",
-  "message_template": "SMARTSHELL UPDATE: COLLISION DETECTED\nName: {name}\nDate: {date}\nGoogle Map: {map_url}"
+  "rider_name": "Juan Dela Cruz",
+  "message_template": "SMARTSHELL UPDATE: COLLISION DETECTED\nName: {name}\nArea: {area}\nHome barangay: {home_barangay}\nDate: {date}\nGoogle Map: {map_url}",
+  "subject_home_barangay": "Juan Dela Cruz Home Barangay"
 }

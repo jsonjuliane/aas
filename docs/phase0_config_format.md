@@ -50,4 +50,4 @@ This document defines the JSON configuration formats used by the SmartShell syst
 | `boundary` | array | List of `[lon, lat]` coordinates (GeoJSON ring) |
 | `name` | string | Human-readable label |
 
-**Note**: Implemented in Phase 2. Template to be added when routing is implemented.
+**Note**: Loaded by `src/routing.py` (point-in-polygon via Shapely). Source file: `config/geofence.binan.json`.

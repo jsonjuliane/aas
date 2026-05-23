@@ -95,6 +95,6 @@ CONFIG_DIR = "config"
 CONTACTS_FAMILY_FILE = "contacts.family.json"
 LOGS_DIR = "logs"
 
-# Phase 2 placeholders (routing / geofence — not used yet)
+# Phase 2 routing
 CONTACTS_BARANGAY_FILE = "contacts.barangay.json"
 GEOFENCE_BINAN_FILE = "geofence.binan.json"
