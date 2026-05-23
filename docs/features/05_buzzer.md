@@ -54,6 +54,7 @@ Each function does its own GPIO setup, drives the pin, then calls `GPIO.cleanup(
 | `silence()` | Drive pin to silent level and cleanup |
 | `beep(duration_sec)` | One beep: ON → sleep → OFF → cleanup |
 | `countdown_tick_beep(seconds_remaining)` | Short beep for sec > 3; longer for final 3 seconds |
+| `monitoring_ready_beeps()` | Triple quick beep when monitoring starts or resumes after alert |
 
 ---
 
@@ -66,6 +67,10 @@ Each function does its own GPIO setup, drives the pin, then calls `GPIO.cleanup(
 | `BUZZER_COUNTDOWN_ENABLED` | `True` | Enable tick beeps during countdown |
 | `BUZZER_BEEP_SEC` | `0.08` | Beep duration for seconds > 3 |
 | `BUZZER_FINAL_BEEP_SEC` | `0.16` | Beep duration for final 3 seconds |
+| `BUZZER_MONITOR_READY_ENABLED` | `True` | Triple beep on monitoring start/resume |
+| `BUZZER_MONITOR_READY_COUNT` | `3` | Number of ready beeps |
+| `BUZZER_MONITOR_READY_BEEP_SEC` | `0.06` | Each ready beep length |
+| `BUZZER_MONITOR_READY_GAP_SEC` | `0.10` | Pause between ready beeps |
 
 ---
 

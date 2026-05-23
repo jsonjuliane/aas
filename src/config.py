@@ -57,6 +57,10 @@ BUZZER_ACTIVE_HIGH = True  # Buzzer silent at LOW, on at HIGH (confirmed by buzz
 BUZZER_COUNTDOWN_ENABLED = True
 BUZZER_BEEP_SEC = 0.08
 BUZZER_FINAL_BEEP_SEC = 0.16
+BUZZER_MONITOR_READY_ENABLED = True  # Triple beep when monitoring starts / resumes
+BUZZER_MONITOR_READY_COUNT = 3
+BUZZER_MONITOR_READY_BEEP_SEC = 0.06
+BUZZER_MONITOR_READY_GAP_SEC = 0.10
 
 # -----------------------------------------------------------------------------
 # Application constants

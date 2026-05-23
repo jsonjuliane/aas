@@ -74,6 +74,31 @@ def beep(duration_sec: float = 0.08) -> bool:
         GPIO.cleanup(pin)
 
 
+def monitoring_ready_beeps() -> bool:
+    """
+    Short triple beep to signal impact monitoring is active (startup or after alert).
+    """
+    from src.config import (
+        BUZZER_MONITOR_READY_BEEP_SEC,
+        BUZZER_MONITOR_READY_COUNT,
+        BUZZER_MONITOR_READY_ENABLED,
+        BUZZER_MONITOR_READY_GAP_SEC,
+    )
+
+    if not BUZZER_MONITOR_READY_ENABLED:
+        return False
+    count = max(1, int(BUZZER_MONITOR_READY_COUNT))
+    beep_sec = max(0.02, float(BUZZER_MONITOR_READY_BEEP_SEC))
+    gap_sec = max(0.02, float(BUZZER_MONITOR_READY_GAP_SEC))
+    ok = True
+    for i in range(count):
+        if not beep(beep_sec):
+            ok = False
+        if i < count - 1:
+            time.sleep(gap_sec)
+    return ok
+
+
 def countdown_tick_beep(seconds_remaining: int) -> bool:
     """
     One beep per countdown second.

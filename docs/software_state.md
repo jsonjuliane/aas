@@ -39,7 +39,7 @@ Then run:
 python -m src.main
 ```
 
-Expected: continuous monitoring; 3–5g candidates are logged with flags; validated impact (with tilt) plays countdown audio (10-second window) then exits after SMS send.
+Expected: continuous monitoring; 3–5g candidates are logged with flags; validated impact plays countdown (10 s) + SMS, then **resumes monitoring** (triple buzzer = ready). Exits only on Ctrl+C.
 
 ---
 

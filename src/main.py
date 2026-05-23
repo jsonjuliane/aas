@@ -1,8 +1,8 @@
 """
 SmartShell — Main entry point.
 
-Runnable in Thonny on Raspberry Pi. Detects impact, runs countdown,
-plays countdown audio, then exits.
+Runnable in Thonny on Raspberry Pi. Detects impact, runs countdown and SMS,
+then resumes monitoring (always-on loop until Ctrl+C).
 
 Usage:
     python -m src.main
@@ -260,6 +260,25 @@ def _prepare_voice_cancel(
     return ctx
 
 
+def _signal_monitoring_active(*, dry_run: bool, resumed: bool = False) -> None:
+    """Triple buzzer beep + log line when impact monitoring is active."""
+    label = "Resuming impact monitoring" if resumed else "Impact monitoring active"
+    print(f"{label}. Press Ctrl+C to stop.")
+    logging_store.log_event(
+        {
+            "event": "monitoring_resumed" if resumed else "monitoring_started",
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+            "dry_run": dry_run,
+        }
+    )
+    if dry_run:
+        print("[dry-run] Would play monitor-ready buzzer (3 quick beeps).")
+        return
+    if buzzer_hw.monitoring_ready_beeps():
+        return
+    print("[buzzer] Monitor-ready beep skipped (GPIO unavailable or disabled).")
+
+
 def run(
     dry_run: bool = False,
     core_flow_only: bool = False,
@@ -273,12 +292,12 @@ def run(
     test_location: tuple[float, float] | None = None,
 ) -> None:
     """
-    Main loop: monitor sensor, on impact play countdown audio then exit.
+    Main loop: monitor sensor; on impact run countdown + SMS, then resume monitoring.
 
     Args:
         dry_run: If True, no hardware access; simulate.
         core_flow_only: If True, skip countdown/cancel/GPS/SMS side effects.
-        test_alert_immediately: If True, run one full alert cycle on first iteration (bench test).
+        test_alert_immediately: If True, run one full alert cycle on first loop (bench test).
         poll_interval_sec: Seconds between sensor polls.
     """
     sensor = sensor_mpu6050.SensorMPU6050(dry_run=dry_run)
@@ -298,9 +317,8 @@ def run(
         )
 
         if dry_run:
-            print("Simulation mode is running. Press Ctrl+C to stop.")
-        else:
-            print("Monitoring for impact events. Press Ctrl+C to stop.")
+            print("Simulation mode is running.")
+        _signal_monitoring_active(dry_run=dry_run, resumed=False)
 
         test_alert_done = False
         last_action_at = -1e9
@@ -321,7 +339,9 @@ def run(
                         voice_device_index=voice_device_index,
                         test_location=test_location,
                     )
-                return
+                    if not core_flow_only:
+                        _signal_monitoring_active(dry_run=dry_run, resumed=True)
+                continue
 
             eval_data = sensor.evaluate_impact()
             now = time.monotonic()
@@ -412,7 +432,7 @@ def run(
                         voice_device_index=voice_device_index,
                         test_location=test_location,
                     )
-                    return
+                    _signal_monitoring_active(dry_run=dry_run, resumed=True)
             time.sleep(poll_interval_sec)
     except KeyboardInterrupt:
         print("\nStopped.")
@@ -534,7 +554,7 @@ def _handle_alert(
             }
         )
         return
-    print("Countdown window complete. Exiting run.")
+    print("Countdown window complete.")
     if location is not None:
         print(
             f"Collision location: {location['lat']:.6f}, {location['lon']:.6f} "
