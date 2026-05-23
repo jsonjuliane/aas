@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from functools import lru_cache
 
 from src.config import (
@@ -154,6 +155,8 @@ def format_message(
     area: str = "Unknown (no GPS)",
     accident_barangay: str | None = None,
     notified: str = "",
+    *,
+    map_precision: int = 6,
 ) -> str:
     """
     Format message with rider name, area, barangays, notified summary, date, and map link.
@@ -166,7 +169,8 @@ def format_message(
     from datetime import datetime
 
     if lat is not None and lon is not None:
-        map_url = f"https://maps.google.com/?q={lat:.6f},{lon:.6f}"
+        prec = max(0, min(8, int(map_precision)))
+        map_url = f"https://maps.google.com/?q={lat:.{prec}f},{lon:.{prec}f}"
     else:
         map_url = "N/A"
     if accident_barangay:
@@ -189,38 +193,57 @@ def format_message(
     return template.format(**{k: all_fields[k] for k in used})
 
 
-_COMPACT_ALERT_TEMPLATE = (
-    "SMARTSHELL COLLISION\n"
-    "{name}\n"
-    "{area}\n"
-    "Home:{home_barangay} At:{accident_barangay}\n"
-    "{map_url}"
+# Formal ASCII paragraph layout (GSM 7-bit safe). Used when config template is too long.
+_FORMAL_ALERT_TEMPLATE = (
+    "SMARTSHELL COLLISION ALERT\n"
+    "\n"
+    "Rider: {name}\n"
+    "Area: {area}\n"
+    "Home: {home_barangay} | Accident: {accident_barangay}\n"
+    "\n"
+    "Map: {map_url}"
 )
 
-# GSM default 7-bit alphabet (SIM800 text mode) cannot encode e.g. ñ in "Biñan".
-# One non-ASCII character forces UCS-2 (~70 chars/part) and often fails delivery.
-_SMS_ASCII_TRANSLATE = str.maketrans(
-    {
-        "ñ": "n",
-        "Ñ": "N",
-        "á": "a",
-        "é": "e",
-        "í": "i",
-        "ó": "o",
-        "ú": "u",
-        "Á": "A",
-        "É": "E",
-        "Í": "I",
-        "Ó": "O",
-        "Ú": "U",
-    }
-)
+# GSM 7-bit cannot encode e.g. n-tilde in "Binan"; UCS-2 often fails on prepaid SIMs.
+_SMS_CHAR_REPLACEMENTS: dict[str, str] = {
+    "ñ": "n",
+    "Ñ": "N",
+    "á": "a",
+    "é": "e",
+    "í": "i",
+    "ó": "o",
+    "ú": "u",
+    "Á": "A",
+    "É": "E",
+    "Í": "I",
+    "Ó": "O",
+    "Ú": "U",
+}
 
 
 def sms_safe_for_gsm7(text: str) -> str:
-    """Strip/replace characters that force UCS-2 multipart SMS on the SIM800."""
-    cleaned = text.translate(_SMS_ASCII_TRANSLATE)
-    return cleaned.encode("ascii", errors="replace").decode("ascii")
+    """
+    Keep only GSM-friendly ASCII (printable + newlines).
+
+    Replaces common accented letters explicitly (never uses bytes encode/replace,
+    which can garble on some handsets). "Biñan" -> "Binan".
+    """
+    normalized = unicodedata.normalize("NFKC", text)
+    out: list[str] = []
+    for ch in normalized:
+        if ch in _SMS_CHAR_REPLACEMENTS:
+            out.append(_SMS_CHAR_REPLACEMENTS[ch])
+            continue
+        if ch in "\r\n":
+            out.append("\n")
+            continue
+        if ch == "\t":
+            out.append(" ")
+            continue
+        code = ord(ch)
+        if 32 <= code <= 126:
+            out.append(ch)
+    return "".join(out)
 
 
 def format_alert_message(
@@ -236,51 +259,47 @@ def format_alert_message(
     max_chars: int | None = None,
 ) -> str:
     """
-    Format collision SMS for reliable single-part delivery.
+    Format collision SMS for reliable single-part GSM 7-bit delivery.
 
-    Uses the configured template when it fits in one GSM part; otherwise a
-  shorter compact layout (no date/notified line). Truncates only as last resort.
+    All fields are ASCII-sanitized (e.g. Biñan -> Binan). Prefers the config
+    template when it fits one part; otherwise the formal paragraph layout.
     """
     limit = int(SMS_SINGLE_PART_MAX_CHARS if max_chars is None else max_chars)
-    body = sms_safe_for_gsm7(
-        format_message(
-            template,
-            lat,
-            lon,
-            rider_name=rider_name,
-            home_barangay=home_barangay,
-            area=area,
-            accident_barangay=accident_barangay,
-            notified=notified,
-        )
-    )
-    if len(body) <= limit:
-        return body
+    safe_name = sms_safe_for_gsm7(rider_name)
+    safe_area = sms_safe_for_gsm7(area)
+    safe_home = sms_safe_for_gsm7(home_barangay)
+    safe_accident = sms_safe_for_gsm7(accident_barangay or "")
 
-    body = sms_safe_for_gsm7(
-        format_message(
-            _COMPACT_ALERT_TEMPLATE,
-            lat,
-            lon,
-            rider_name=rider_name,
-            home_barangay=home_barangay,
-            area=area,
-            accident_barangay=accident_barangay,
-            notified=notified,
+    def _build(tpl: str, *, map_precision: int = 4) -> str:
+        return sms_safe_for_gsm7(
+            format_message(
+                tpl,
+                lat,
+                lon,
+                rider_name=safe_name,
+                home_barangay=safe_home,
+                area=safe_area,
+                accident_barangay=safe_accident or None,
+                notified=sms_safe_for_gsm7(notified),
+                map_precision=map_precision,
+            )
         )
-    )
-    if len(body) <= limit:
-        return body
+
+    for tpl, prec in ((template, 4), (_FORMAL_ALERT_TEMPLATE, 4), (_FORMAL_ALERT_TEMPLATE, 3)):
+        body = _build(tpl, map_precision=prec)
+        if len(body) <= limit:
+            return body
 
     if lat is not None and lon is not None:
-        short_map = f"https://maps.google.com/?q={lat:.4f},{lon:.4f}"
+        short_map = f"https://maps.google.com/?q={lat:.3f},{lon:.3f}"
     else:
         short_map = "N/A"
-    body = sms_safe_for_gsm7(
-        f"SMARTSHELL COLLISION\n{sms_safe_for_gsm7(rider_name)[:24]}\n"
-        f"{sms_safe_for_gsm7(area)[:32]}\n"
-        f"Home:{sms_safe_for_gsm7(home_barangay)[:12]} "
-        f"At:{sms_safe_for_gsm7(accident_barangay or 'N/A')[:12]}\n{short_map}"
+    body = (
+        "SMARTSHELL COLLISION ALERT\n\n"
+        f"Rider: {safe_name[:28]}\n"
+        f"Area: {safe_area[:28]}\n"
+        f"Home: {safe_home[:14]} | Accident: {(safe_accident or 'N/A')[:14]}\n\n"
+        f"Map: {short_map}"
     )
     if len(body) > limit:
         body = body[: limit - 3] + "..."

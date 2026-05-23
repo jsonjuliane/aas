@@ -63,6 +63,8 @@ def main() -> int:
     _check("compact alert fits one part", len(compact) <= 160)
     _check("binan ascii safe", "ñ" not in compact and "Inside Binan" in compact)
     _check("sms_safe strips ntilde", sms_safe_for_gsm7("Inside Biñan") == "Inside Binan")
+    _check("no garbled at-sign", "@" not in sms_safe_for_gsm7("Inside Biñan test"))
+    _check("formal paragraph newlines", "\n\nRider:" in compact or "\n\n" in compact)
     parts = message_parts_for_delivery("x" * 200)
     _check("split long body", len(parts) >= 2)
     _check("split parts fit limit", all(len(p) <= 160 for p in split_message_for_sms("x" * 200)))

@@ -19,6 +19,6 @@
     }
   ],
   "rider_name": "Juan Dela Cruz",
-  "message_template": "SMARTSHELL COLLISION\n{name}\n{area}\nHome:{home_barangay} At:{accident_barangay}\n{map_url}",
+  "message_template": "SMARTSHELL COLLISION ALERT\n\nRider: {name}\nArea: {area}\nHome: {home_barangay} | Accident: {accident_barangay}\n\nMap: {map_url}",
   "subject_home_barangay": "Zapote"
 }
