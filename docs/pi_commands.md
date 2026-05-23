@@ -36,6 +36,7 @@ python -m src.main --test-alert --disable-sms-send  # Full alert without sending
 # Hardware diagnostics
 python -m src.hardware_check                    # Full hardware probe (exit 1 on any FAIL)
 python -m src.gsm_test                          # GSM: baud sweep, SIM, signal
+python -m src.gsm_alert_test                    # GSM policy checks (no hardware)
 python -m src.gps_test                          # GPS: NMEA stream, $GPGGA fixes
 python -m src.routing_test                      # Biñan geofence: inside/outside sample points
 python -m src.mpu_collision_test                # MPU: tap/collision JSONL test

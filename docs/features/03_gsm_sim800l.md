@@ -42,18 +42,34 @@ SIM800L draws high current bursts during transmit. Ensure:
 - 100µF capacitor at module
 - Star ground with Pi
 
-## Implementation (Phase 1)
+## Implementation
 
-- **File**: `src/gsm_sim800l.py`
-- **Public helper**: `send_at(ser, cmd, timeout)` — used by `hardware_check` and `gsm_test`.
-- **Class**: `GSMSIM800L(device=None, dry_run=False)`
-- **Usage**: `gsm.open()`; `ok = gsm.send_sms(phone, text)` (sets text mode before send).
+- **Low-level UART**: `src/gsm_sim800l.py` — `GSMSIM800L`, `send_sms_detailed()`
+- **Alert policy**: `src/gsm_alert.py` — readiness wait, signal-aware retries (used by `main.py`)
+
+### Collision-alert SMS policy (Phase 2 Step 4)
+
+Configured in `src/config.py`:
+
+| Constant | Default | Meaning |
+|----------|---------|---------|
+| `GSM_WAIT_REGISTER_SEC` | 30 | Max wait for registration + usable signal before any send |
+| `GSM_WAIT_POLL_SEC` | 2 | Poll interval during wait |
+| `GSM_MIN_CSQ_TO_SEND` | 7 | Minimum CSQ (0–31) to attempt send; 99 = unknown |
+| `GSM_SEND_RETRY_COUNT` | 2 | Attempts per recipient |
+| `GSM_SEND_RETRY_BACKOFF_SEC` | 4 | Pause after signal recovers, before retry |
+| `GSM_SEND_RETRY_SIGNAL_WAIT_SEC` | 8 | Max wait for CSQ to recover before each attempt/retry |
+
+**Pre-send:** `wait_for_gsm_ready()` then `probe_sms_ready()`. If CSQ stays below threshold after the wait, SMS is **not attempted** (logged as `gsm_not_ready:signal_too_weak:...`).
+
+**Per recipient:** Before each attempt, wait up to `GSM_SEND_RETRY_SIGNAL_WAIT_SEC` for CSQ ≥ minimum. On failure, wait for usable signal again before the second attempt; if signal stays weak, retry is skipped (`weak_signal_retry_aborted`).
 
 ## Isolated bench test
 
 ```bash
 python -m src.gsm_test
 python -m src.gsm_test --send-sms +639171234567 "Test message"
+python -m src.gsm_alert_test   # Policy unit checks (no hardware)
 ```
 
 Also covered by `python -m src.hardware_check` (multi-baud AT + quick SIM/signal if AT succeeds).

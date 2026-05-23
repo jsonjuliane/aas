@@ -86,9 +86,10 @@ VOICE_KEYWORD_MIN_RMS = 6500  # skip cloud STT below this (idle p95 ~6.2k on ben
 GPS_COLLISION_FIX_TIMEOUT_SEC = 8.0
 GSM_WAIT_REGISTER_SEC = 30.0  # Max wait for network registration before SMS send
 GSM_WAIT_POLL_SEC = 2.0  # Poll interval while waiting for GSM readiness
-GSM_MIN_CSQ_TO_SEND = 7  # Minimum usable CSQ to attempt SMS send
+GSM_MIN_CSQ_TO_SEND = 7  # Minimum usable CSQ to attempt SMS send (0–31; 99=unknown)
 GSM_SEND_RETRY_COUNT = 2  # Per-recipient SMS send attempts
-GSM_SEND_RETRY_BACKOFF_SEC = 4.0  # Delay between SMS retries for same recipient
+GSM_SEND_RETRY_BACKOFF_SEC = 4.0  # Delay between SMS retries after signal is usable again
+GSM_SEND_RETRY_SIGNAL_WAIT_SEC = 8.0  # Max wait for CSQ to recover before each attempt/retry
 
 # Paths (relative to project root)
 CONFIG_DIR = "config"

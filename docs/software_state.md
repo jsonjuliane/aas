@@ -7,7 +7,7 @@
 | **Main loop** | `main.py` | All | Polls sensor; logs 3–5g impact-window samples; on validated impact (3–5g + tilt) plays countdown audio then exits. |
 | **Sensor** | `sensor_mpu6050.py` | MPU-6050 @ I2C `0x68` | `calibrate()` at start; `evaluate_impact()` uses accel magnitude + baseline tilt. |
 | **GPS** | `gps.py` | GPS UART | Reads NMEA from `GPS_SERIAL_PORT` **or** GPIO software UART (pigpio) when port is `None` (default for GPIO20/21 wiring). `get_fix()` parses `$GPGGA`. |
-| **GSM** | `gsm_sim800l.py` | SIM800L on `/dev/serial0` | `send_sms_detailed()` via AT commands with retry logic. |
+| **GSM** | `gsm_sim800l.py`, `gsm_alert.py` | SIM800L on `/dev/serial0` | AT send + readiness wait, CSQ gate, signal-aware retries. |
 | **Audio** | `audio_mp3.py` | DFPlayer-style on UART | `play_track(N)` → `mp3/000N.mp3` on the SD card (command 0x03); kernel serial **or** pigpio GPIO TX when `MP3_SERIAL_PORT=None` (GPIO19 wiring). MP3 module reserved for future use. |
 | **Cancel (button)** | `cancel.py` | GPIO **17** (optional button) | Active-low with internal pull-up. Wire a momentary switch between GPIO17 and GND. |
 | **Cancel (voice)** | `voice_cancel.py` | USB mic (e.g. USB Audio Device) | Background Google STT keyword listener; says "cancel" to abort the countdown. Requires internet. Configured in `config.py`. |
@@ -16,7 +16,7 @@
 | **Logging** | `logging_store.py` | — | Appends JSON lines under `logs/`. |
 | **Config** | `config.py` | Pin + path constants | Single place for GPIO, baud, serial device paths, voice/buzzer thresholds. |
 
-**Phase 2 (complete for routing):** Biñan geofence, inside/outside SMS, family + home + accident barangay rescuers (`get_recipients`, nearest-centroid lookup).
+**Phase 2:** Routing (Biñan geofence, family + home + accident rescuers) and GSM alert policy (`gsm_alert.py`: CSQ gate, signal-aware retries).
 
 **Phase 4 (not in `src` yet):** responder loop enhancements, watchdogs. **Boot autostart:** use `deploy/smartshell.service.example` + `README.md` now.
 
@@ -52,6 +52,7 @@ Expected: continuous monitoring; 3–5g candidates are logged with flags; valida
 | MP3 countdown audio | Wired (`audio_mp3.py`); DFPlayer serial TX implemented; RX feedback path unreliable on hardware (level-shift issue). Reserved for future fix. |
 | Inside/outside Biñan (geofence) | **Implemented** — `routing.py`; SMS `Area:` line + `routing_decision` log. |
 | Home + accident barangay rescuer SMS | **Implemented** — `get_recipients`; accident barangay via `barangay_centroids.binan.json` when inside Biñan. |
+| GSM weak-signal handling | **Implemented** — no send if CSQ &lt; 7 after wait; signal-aware retry (`gsm_alert.py`). |
 | Responder loop / incoming-SMS reply | Not implemented (Phase 4). |
 | GPIO UART for GPS/MP3 without `/dev/tty*` | Implemented via pigpio software UART; requires `pigpio` + running `pigpiod` service on the Pi. |
 
