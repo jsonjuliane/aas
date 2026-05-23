@@ -16,6 +16,7 @@ from src.config import (
     CONTACTS_BARANGAY_FILE,
     CONTACTS_FAMILY_FILE,
     PROJECT_ROOT,
+    SMS_ALERT_TARGET_MAX_CHARS,
     SMS_SINGLE_PART_MAX_CHARS,
     SMS_SPLIT_PART_MAX_CHARS,
 )
@@ -264,7 +265,7 @@ def format_alert_message(
     All fields are ASCII-sanitized (e.g. Biñan -> Binan). Prefers the config
     template when it fits one part; otherwise the formal paragraph layout.
     """
-    limit = int(SMS_SINGLE_PART_MAX_CHARS if max_chars is None else max_chars)
+    limit = int(SMS_ALERT_TARGET_MAX_CHARS if max_chars is None else max_chars)
     safe_name = sms_safe_for_gsm7(rider_name)
     safe_area = sms_safe_for_gsm7(area)
     safe_home = sms_safe_for_gsm7(home_barangay)

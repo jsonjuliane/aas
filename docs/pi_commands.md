@@ -55,7 +55,10 @@ python -m src.routing_matrix_test --sms-preview # Same + print SMS body per scen
 # Hardware diagnostics
 python -m src.hardware_check                    # Full hardware probe (exit 1 on any FAIL)
 python -m src.gsm_test                          # GSM: baud sweep, SIM, signal
+python -m src.sms_config_check                     # Verify contacts.family.json + sample alert length
+python -m src.sms_config_check --send-test +639XXXXXXXXX  # Check then send one production alert
 python -m src.gsm_test --send-test-sms +639XXXXXXXXX  # Short "Test text" via alert send path
+python -m src.gsm_test --send-alert-sms +639XXXXXXXXX   # Production-format alert (no [SSnn] tag)
 python -m src.gsm_sms_matrix_test --list              # SMS delivery diagnostic cases
 python -m src.gsm_sms_matrix_test --phone +639XXXXXXXXX --dry-run
 python -m src.gsm_sms_matrix_test --phone +639XXXXXXXXX --confirm  # Sends [SS01]..[SS21] (12s apart)

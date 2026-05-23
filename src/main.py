@@ -899,11 +899,14 @@ def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool
         else None,
         notified=str(route.get("notified", "")),
     )
-    if len(message) <= 160:
-        print(f"GSM SMS body: {len(message)} chars (single-part).")
+    sms_parts = contacts.message_parts_for_delivery(message)
+    if len(sms_parts) == 1:
+        print(f"GSM SMS body: {len(message)} chars, 1 part (GSM 7-bit).")
     else:
-        parts = contacts.message_parts_for_delivery(message)
-        print(f"GSM SMS body: {len(message)} chars → {len(parts)} separate SMS part(s).")
+        print(
+            f"GSM SMS body: {len(message)} chars → {len(sms_parts)} separate SMS "
+            f"(run: python -m src.sms_config_check)"
+        )
 
     modem = gsm_sim800l.GSMSIM800L(dry_run=dry_run)
     sent = 0

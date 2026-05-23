@@ -95,7 +95,8 @@ GSM_SEND_RETRY_COUNT = 2  # Per-recipient SMS send attempts
 GSM_SEND_RETRY_BACKOFF_SEC = 4.0  # Delay between SMS retries after signal is usable again
 GSM_SEND_RETRY_SIGNAL_WAIT_SEC = 8.0  # Max wait for CSQ to recover before each attempt/retry
 # SMS length: multipart/concat often fails to handsets on prepaid SIMs; prefer one part.
-SMS_SINGLE_PART_MAX_CHARS = 160
+SMS_SINGLE_PART_MAX_CHARS = 160  # GSM 7-bit one-part limit
+SMS_ALERT_TARGET_MAX_CHARS = 154  # keep collision alerts under this (margin for handsets)
 SMS_SPLIT_PART_MAX_CHARS = 145  # body per part when splitting (room for "(1/2) " prefix)
 SMS_INTER_PART_DELAY_SEC = 2.0  # pause between separate CMGS when splitting
 GSM_BENCH_TEST_TEXT = "Test text"  # body for: python -m src.gsm_test --send-test-sms PHONE
