@@ -1,7 +1,6 @@
 """
 SmartShell — Contact configuration loader.
 
-Loads family and barangay contacts from config JSON.
 Loads family and barangay rescuer contacts from config JSON.
 """
 
@@ -24,6 +23,8 @@ _DEFAULT_TEMPLATE = (
     "Name: {name}\n"
     "Area: {area}\n"
     "Home barangay: {home_barangay}\n"
+    "Accident barangay: {accident_barangay}\n"
+    "Notified: {notified}\n"
     "Date: {date}\n"
     "Google Map: {map_url}"
 )
@@ -35,7 +36,7 @@ def load_family_contacts() -> tuple[list[str], str, str, str]:
 
     Returns:
         Tuple of (phones, message_template, rider_name, subject_home_barangay).
-        Placeholders in template: {name}, {area}, {home_barangay}, {date}, {map_url}.
+        Placeholders: {name}, {area}, {home_barangay}, {accident_barangay}, {notified}, {date}, {map_url}.
 
     Raises:
         FileNotFoundError: If contacts file not found.
@@ -149,20 +150,16 @@ def format_message(
     rider_name: str = "Unknown",
     home_barangay: str = "Unknown",
     area: str = "Unknown (no GPS)",
+    accident_barangay: str | None = None,
+    notified: str = "",
 ) -> str:
     """
-    Format message with rider name, area, home barangay, date, and Google Maps link.
+    Format message with rider name, area, barangays, notified summary, date, and map link.
 
     Args:
-        template: Template with {name}, {area}, {home_barangay}, {date}, {map_url}.
-        lat: Latitude or None.
-        lon: Longitude or None.
-        rider_name: Name of the rider/device owner.
-        home_barangay: Rider's residence barangay (subject_home_barangay from config).
-        area: Inside/outside Biñan label from routing.
-
-    Returns:
-        Formatted message string.
+        template: Template with optional placeholders (see module default).
+        accident_barangay: Resolved accident barangay, or None outside Biñan / no GPS.
+        notified: Summary of recipient groups from routing.
     """
     from datetime import datetime
 
@@ -170,11 +167,19 @@ def format_message(
         map_url = f"https://maps.google.com/?q={lat:.6f},{lon:.6f}"
     else:
         map_url = "N/A"
+    if accident_barangay:
+        accident_label = accident_barangay
+    elif area.startswith("Inside"):
+        accident_label = "Unknown"
+    else:
+        accident_label = "N/A"
     date_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
     all_fields = {
         "name": rider_name,
         "area": area,
         "home_barangay": home_barangay,
+        "accident_barangay": accident_label,
+        "notified": notified or "N/A",
         "date": date_str,
         "map_url": map_url,
     }

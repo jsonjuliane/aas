@@ -860,6 +860,10 @@ def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool
         rider_name=rider_name,
         home_barangay=home_barangay,
         area=area,
+        accident_barangay=route.get("accident_barangay")
+        if route.get("accident_barangay")
+        else None,
+        notified=str(route.get("notified", "")),
     )
 
     modem = gsm_sim800l.GSMSIM800L(dry_run=dry_run)

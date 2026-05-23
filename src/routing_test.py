@@ -5,7 +5,13 @@ Bench test for Biñan geofence and recipient routing — run: python -m src.rout
 from __future__ import annotations
 
 from src import contacts
-from src.routing import area_label, classify_location, get_recipients, is_inside_binan
+from src.routing import (
+    area_label,
+    classify_location,
+    get_recipients,
+    is_inside_binan,
+    resolve_accident_barangay,
+)
 
 
 def _check(name: str, lat: float, lon: float, expect_inside: bool) -> None:
@@ -26,7 +32,8 @@ def _check_recipients(
     home_barangay: str,
     *,
     min_count: int,
-    must_include: str | None = None,
+    must_include: list[str] | None = None,
+    expect_accident: str | None = None,
 ) -> None:
     family = ["+639000000001"]
     out = get_recipients(
@@ -38,11 +45,13 @@ def _check_recipients(
     phones = out["phones"]
     ok = len(phones) >= min_count
     if must_include:
-        ok = ok and must_include in phones
+        ok = ok and all(p in phones for p in must_include)
+    if expect_accident is not None:
+        ok = ok and out.get("accident_barangay") == expect_accident
     tag = "OK" if ok else "FAIL"
     print(
-        f"[{tag}] Recipients {name}: {phones} "
-        f"(home_matched={out.get('home_rescuer_matched')})"
+        f"[{tag}] Recipients {name}: count={len(phones)} phones={phones} "
+        f"accident={out.get('accident_barangay')} notified={out.get('notified')}"
     )
     if not ok:
         raise SystemExit(1)
@@ -55,17 +64,23 @@ def main() -> int:
     cls = classify_location(None, None)
     print(f"[OK] No GPS: {area_label(cls)} (class={cls})")
 
-    zapote_rescuer = contacts.lookup_rescuer_phone(
-        "Zapote",
-        contacts.load_barangay_contacts()[0],
-    )
+    barangay_map, _ = contacts.load_barangay_contacts()
+    zapote_rescuer = contacts.lookup_rescuer_phone("Zapote", barangay_map)
+    langkiwa_rescuer = contacts.lookup_rescuer_phone("Langkiwa", barangay_map)
+
+    accident = resolve_accident_barangay(14.2989841, 121.0597082)
+    print(f"[{'OK' if accident == 'Langkiwa' else 'FAIL'}] resolve_accident at Langkiwa -> {accident}")
+    if accident != "Langkiwa":
+        raise SystemExit(1)
+
     _check_recipients(
-        "inside Biñan + Zapote home",
-        14.34267,
-        121.08071,
+        "inside Biñan, home Zapote, accident near Langkiwa",
+        14.2989841,
+        121.0597082,
         "Zapote",
-        min_count=2,
-        must_include=zapote_rescuer,
+        min_count=3,
+        must_include=[zapote_rescuer, langkiwa_rescuer],  # type: ignore[list-item]
+        expect_accident="Langkiwa",
     )
     _check_recipients(
         "outside Biñan + Zapote home",
@@ -73,7 +88,8 @@ def main() -> int:
         120.98,
         "Zapote",
         min_count=2,
-        must_include=zapote_rescuer,
+        must_include=[zapote_rescuer],  # type: ignore[list-item]
+        expect_accident=None,
     )
     _check_recipients(
         "no GPS + Zapote home",
@@ -81,7 +97,8 @@ def main() -> int:
         None,
         "Zapote",
         min_count=2,
-        must_include=zapote_rescuer,
+        must_include=[zapote_rescuer],  # type: ignore[list-item]
+        expect_accident=None,
     )
     _check_recipients(
         "unknown home barangay name",
@@ -89,7 +106,7 @@ def main() -> int:
         None,
         "Not A Real Barangay",
         min_count=1,
-        must_include=None,
+        expect_accident=None,
     )
     return 0
 

@@ -98,3 +98,4 @@ LOGS_DIR = "logs"
 # Phase 2 routing
 CONTACTS_BARANGAY_FILE = "contacts.barangay.json"
 GEOFENCE_BINAN_FILE = "geofence.binan.json"
+BARANGAY_CENTROIDS_BINAN_FILE = "barangay_centroids.binan.json"
