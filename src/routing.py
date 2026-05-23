@@ -11,6 +11,7 @@ import json
 from functools import lru_cache
 from typing import Literal
 
+from src import contacts
 from src.config import CONFIG_DIR, GEOFENCE_BINAN_FILE, PROJECT_ROOT
 
 LocationClass = Literal["inside_binan", "outside_binan", "unknown"]
@@ -86,11 +87,71 @@ def area_label(location_class: LocationClass) -> str:
     return _AREA_LABELS[location_class]
 
 
+def _dedupe_phones_preserve_order(phones: list[str]) -> list[str]:
+    """Remove duplicate numbers while keeping first occurrence order."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for phone in phones:
+        if phone in seen:
+            continue
+        seen.add(phone)
+        out.append(phone)
+    return out
+
+
+def get_recipients(
+    lat: float | None,
+    lon: float | None,
+    *,
+    family_phones: list[str],
+    home_barangay: str,
+) -> dict[str, object]:
+    """
+    Build alert recipient list (E.164 phones, family first).
+
+    Step 2 rules (accident barangay in Step 3):
+      - Always: family contacts (priority order)
+      - Always when configured: home barangay rescuer
+      - inside_binan / outside_binan / unknown: same recipients for now
+
+    Returns:
+        Dict with phones, routing metadata for logs.
+    """
+    location_class = classify_location(lat, lon)
+    barangay_map, default_phone = contacts.load_barangay_contacts()
+    home_rescuer = contacts.lookup_rescuer_phone(
+        home_barangay,
+        barangay_map,
+        use_default=False,
+        default_phone=default_phone,
+    )
+    phones: list[str] = list(family_phones)
+    if home_rescuer:
+        phones.append(home_rescuer)
+    phones = _dedupe_phones_preserve_order(phones)
+    return {
+        "location_class": location_class,
+        "area_label": area_label(location_class),
+        "inside_binan": None
+        if location_class == "unknown"
+        else location_class == "inside_binan",
+        "lat": lat,
+        "lon": lon,
+        "phones": phones,
+        "family_count": len(family_phones),
+        "home_barangay": home_barangay,
+        "home_rescuer_phone": home_rescuer,
+        "home_rescuer_matched": home_rescuer is not None,
+        "accident_barangay": None,
+        "accident_rescuer_phone": None,
+    }
+
+
 def routing_decision(lat: float | None, lon: float | None) -> dict[str, object]:
     """
-    Build routing decision payload for logging and SMS.
+    Build geofence-only routing payload (location class and area label).
 
-    Keys: location_class, area_label, inside_binan (bool | None), lat, lon.
+    For full recipient list use get_recipients().
     """
     location_class = classify_location(lat, lon)
     inside: bool | None

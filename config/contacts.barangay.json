@@ -1,5 +1,5 @@
 {
-  "_comment": "Copy to contacts.barangay.json. Barangay name must match subject_home_barangay in contacts.family.json.",
+  "_comment": "Barangay rescuer phones for Biñan routing. Names must match subject_home_barangay in contacts.family.json.",
   "version": 1,
   "barangays": [
     { "name": "Zapote", "rescuer_phone": "+639152220591" },

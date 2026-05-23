@@ -820,20 +820,31 @@ def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool
     try:
         from src import routing
 
-        route = routing.routing_decision(lat, lon)
+        route = routing.get_recipients(
+            lat,
+            lon,
+            family_phones=phones,
+            home_barangay=home_barangay,
+        )
+        phones = list(route.get("phones", phones))
     except Exception as e:
         route = {
             "location_class": "unknown",
-            "area_label": "Unknown (geofence error)",
+            "area_label": "Unknown (routing error)",
             "inside_binan": None,
             "lat": lat,
             "lon": lon,
+            "phones": phones,
             "error": str(e),
         }
-        print(f"Routing geofence error: {e}")
+        print(f"Routing error: {e}")
 
     area = str(route.get("area_label", "Unknown (no GPS)"))
-    print(f"Routing: {area} (class={route.get('location_class')}, lat={lat}, lon={lon})")
+    home_rescuer = route.get("home_rescuer_phone")
+    print(
+        f"Routing: {area} (class={route.get('location_class')}, lat={lat}, lon={lon}, "
+        f"recipients={len(phones)}, home_rescuer={home_rescuer})"
+    )
     logging_store.log_event(
         {
             "event": "routing_decision",
