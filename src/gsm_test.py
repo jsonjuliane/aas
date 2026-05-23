@@ -5,6 +5,7 @@ Run on Raspberry Pi:
     python -m src.gsm_test
     python -m src.gsm_test --send-sms +639171234567 "Test message"
     python -m src.gsm_test --send-alert-sms +639568504890
+    python -m src.gsm_test --send-test-sms +639568504890
     python -m src.gsm_test --send-sms +639568504890 --message-file /tmp/alert.txt
 """
 
@@ -21,7 +22,7 @@ _PROJECT = Path(__file__).resolve().parent.parent
 if str(_PROJECT) not in sys.path:
     sys.path.insert(0, str(_PROJECT))
 
-from src.config import SIM800L_BAUD, SIM800L_UART_DEVICE
+from src.config import GSM_BENCH_TEST_TEXT, SIM800L_BAUD, SIM800L_UART_DEVICE
 from src import gsm_alert
 from src.gsm_sim800l import GSMSIM800L, send_at
 
@@ -87,12 +88,30 @@ def main() -> int:
         default=None,
         help="Send full collision alert body from contacts.family.json (sample inside-Biñan GPS)",
     )
+    ap.add_argument(
+        "--send-test-sms",
+        metavar="PHONE",
+        default=None,
+        help=f'Send short bench SMS (default text: "{GSM_BENCH_TEST_TEXT}") via alert send path',
+    )
+    ap.add_argument(
+        "--test-text",
+        default=None,
+        help=f'Override bench SMS body (with --send-test-sms; default "{GSM_BENCH_TEST_TEXT}")',
+    )
     args = ap.parse_args()
 
+    send_modes = sum(
+        1
+        for x in (args.send_sms, args.send_alert_sms, args.send_test_sms)
+        if x is not None
+    )
+    if send_modes > 1:
+        ap.error("Use only one of: --send-sms, --send-alert-sms, --send-test-sms")
     if args.message_file and (not args.send_sms or len(args.send_sms) != 1):
         ap.error("--message-file requires exactly: --send-sms PHONE")
-    if args.send_alert_sms and args.send_sms:
-        ap.error("Use either --send-alert-sms or --send-sms, not both")
+    if args.test_text and not args.send_test_sms:
+        ap.error("--test-text requires --send-test-sms")
 
     dev = SIM800L_UART_DEVICE
     print("SmartShell — GSM isolated test\n")
@@ -166,7 +185,11 @@ def main() -> int:
 
         send_phone: str | None = None
         send_message: str | None = None
-        if args.send_alert_sms:
+        if args.send_test_sms:
+            send_phone = str(args.send_test_sms)
+            send_message = str(args.test_text if args.test_text is not None else GSM_BENCH_TEST_TEXT)
+            print(f'[INFO ] Bench test SMS: {len(send_message)} chars, body="{send_message}"')
+        elif args.send_alert_sms:
             from src import contacts
 
             _, tpl, rider, home = contacts.load_family_contacts()

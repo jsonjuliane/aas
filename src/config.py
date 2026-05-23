@@ -98,6 +98,7 @@ GSM_SEND_RETRY_SIGNAL_WAIT_SEC = 8.0  # Max wait for CSQ to recover before each 
 SMS_SINGLE_PART_MAX_CHARS = 160
 SMS_SPLIT_PART_MAX_CHARS = 145  # body per part when splitting (room for "(1/2) " prefix)
 SMS_INTER_PART_DELAY_SEC = 2.0  # pause between separate CMGS when splitting
+GSM_BENCH_TEST_TEXT = "Test text"  # body for: python -m src.gsm_test --send-test-sms PHONE
 
 # Paths (relative to project root)
 CONFIG_DIR = "config"

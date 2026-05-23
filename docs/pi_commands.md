@@ -55,6 +55,7 @@ python -m src.routing_matrix_test --sms-preview # Same + print SMS body per scen
 # Hardware diagnostics
 python -m src.hardware_check                    # Full hardware probe (exit 1 on any FAIL)
 python -m src.gsm_test                          # GSM: baud sweep, SIM, signal
+python -m src.gsm_test --send-test-sms +639XXXXXXXXX  # Short "Test text" via alert send path
 python -m src.gsm_alert_test                    # GSM policy checks (no hardware)
 python -m src.gps_test                          # GPS: NMEA stream, $GPGGA fixes
 python -m src.mpu_collision_test                # MPU: tap/collision JSONL test
@@ -77,7 +78,7 @@ python -m src.mic_stt_oneshot                   # One-shot STT: checks flac, int
 
 - **`--core-flow-only`**: init + sensor monitoring / threshold / validation; logs core-flow impact events and skips alert action.
 - **`python -m src.hardware_check`**: one-shot I2C / GPIO / GSM (multi-baud AT + SIM/signal if OK) / GPS / MP3 probes. Exit code **1** if any line is **`[FAIL]`**, else **0**. **WARN / SKIP / FAIL / INFO** lines include indented **causes**; entries are appended to **`logs/hardware_check.log`** on the Pi.
-- **`python -m src.gsm_test`**: deeper GSM bench (baud sweep, `AT+CPIN?`, `AT+CREG?`, `AT+CSQ`, `AT+COPS?`). Optional: `--send-sms PHONE "message"`.
+- **`python -m src.gsm_test`**: deeper GSM bench (baud sweep, `AT+CPIN?`, `AT+CREG?`, `AT+CSQ`, `AT+COPS?`). Optional: `--send-test-sms PHONE` (short `"Test text"`), `--send-alert-sms PHONE`, or `--send-sms PHONE "message"`.
 - **`python -m src.gps_test`**: auto-detect baud, stream NMEA for `--duration-sec` (default 30), print `$GPGGA` fixes.
 - **`python -m src.audio_test --track 1`**: play DFPlayer track 1 (`mp3/0001.mp3` layout). Use `--probe-range N` to test multiple tracks.
 - **`python -m src.mp3_diag`**: full **MP3-TF-16P** bench (reset 0x0C, TF select, volume, queries, `play_track`, optional `01/001` fallback). Same as `python -m src.audio_test --mp3tf16p-diag`.
