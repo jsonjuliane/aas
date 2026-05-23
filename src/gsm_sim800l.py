@@ -39,6 +39,51 @@ def _extract_cms_error_code(resp: str) -> int | None:
         return None
 
 
+def _cmgs_submit_timeout_sec(text: str) -> float:
+    """Allow extra time for multipart SMS after Ctrl+Z (SIM800 can take several seconds)."""
+    # ~160 chars per GSM part; budget ~8s per part, minimum 20s.
+    parts = max(1, (len(text) + 159) // 160)
+    return max(20.0, 8.0 * parts)
+
+
+def _read_modem_response_after_cmgs(ser: Any, *, timeout_sec: float) -> str:
+    """
+    Read UART until CMGS submit finishes. Do not send another AT command here —
+    an extra CRLF during submit can abort long / multipart SMS.
+    """
+    deadline = time.monotonic() + timeout_sec
+    buf: list[str] = []
+    while time.monotonic() < deadline:
+        if ser.in_waiting:
+            buf.append(ser.read(ser.in_waiting).decode("ascii", errors="replace"))
+            combined = "".join(buf)
+            if "+CMS ERROR" in combined:
+                time.sleep(0.2)
+                if ser.in_waiting:
+                    buf.append(ser.read(ser.in_waiting).decode("ascii", errors="replace"))
+                break
+            if "+CMGS:" in combined and "OK" in combined:
+                time.sleep(0.15)
+                if ser.in_waiting:
+                    buf.append(ser.read(ser.in_waiting).decode("ascii", errors="replace"))
+                break
+            if "ERROR" in combined and "+CMGS:" not in combined:
+                break
+        else:
+            time.sleep(0.05)
+    return "".join(buf)
+
+
+def _cmgs_submit_ok(resp: str) -> bool:
+    """True when modem accepted the message (+CMGS, no CMS ERROR)."""
+    if "+CMS ERROR" in resp:
+        return False
+    if "+CMGS:" in resp:
+        return True
+    # Some firmware returns only OK; treat as success only without ERROR.
+    return "OK" in resp and "ERROR" not in resp
+
+
 class GSMSIM800L:
     """
     SIM800L GSM module interface for sending SMS.
@@ -162,9 +207,13 @@ class GSMSIM800L:
                     "cms_error_code": _extract_cms_error_code(cmgs_response_raw),
                 }
             time.sleep(0.2)
+            self._ser.reset_input_buffer()
             self._ser.write((text + "\x1a").encode())
-            final_submit_response_raw = send_at(self._ser, "", timeout=15.0)
-            if "OK" in final_submit_response_raw:
+            submit_timeout = _cmgs_submit_timeout_sec(text)
+            final_submit_response_raw = _read_modem_response_after_cmgs(
+                self._ser, timeout_sec=submit_timeout
+            )
+            if _cmgs_submit_ok(final_submit_response_raw):
                 return {
                     "ok": True,
                     "reason": "ok",
@@ -173,9 +222,14 @@ class GSMSIM800L:
                     "final_submit_response_raw": final_submit_response_raw,
                     "cms_error_code": _extract_cms_error_code(final_submit_response_raw),
                 }
+            reason = "send_not_acknowledged"
+            if "+CMS ERROR" in final_submit_response_raw:
+                reason = "cms_error"
+            elif "+CMGS:" not in final_submit_response_raw:
+                reason = "no_cmgs_response"
             return {
                 "ok": False,
-                "reason": "send_not_acknowledged",
+                "reason": reason,
                 "signal_strength": signal_strength,
                 "cmgs_response_raw": cmgs_response_raw,
                 "final_submit_response_raw": final_submit_response_raw,

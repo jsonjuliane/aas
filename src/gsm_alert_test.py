@@ -5,6 +5,7 @@ Unit tests for GSM alert policy — run: python -m src.gsm_alert_test
 from __future__ import annotations
 
 from src.gsm_alert import is_usable_csq, not_ready_reason, probe_csq, probe_sms_ready
+from src.gsm_sim800l import _cmgs_submit_ok, _cmgs_submit_timeout_sec
 
 
 def _check(name: str, ok: bool) -> None:
@@ -38,6 +39,10 @@ def main() -> int:
     no_net = dict(ready_probe)
     no_net["network_registered"] = False
     _check("no net reason", not_ready_reason(no_net) == "network_not_registered")
+
+    _check("cmgs ok response", _cmgs_submit_ok("+CMGS: 12\r\n\r\nOK\r\n"))
+    _check("cms error not ok", not _cmgs_submit_ok("+CMS ERROR: 500\r\n"))
+    _check("long sms timeout", _cmgs_submit_timeout_sec("x" * 280) >= 20.0)
 
     print("All gsm_alert policy checks passed.")
     return 0

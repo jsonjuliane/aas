@@ -4,6 +4,8 @@ Isolated SIM800L GSM diagnostic (multi-baud AT, SIM, registration, signal).
 Run on Raspberry Pi:
     python -m src.gsm_test
     python -m src.gsm_test --send-sms +639171234567 "Test message"
+    python -m src.gsm_test --send-alert-sms +639568504890
+    python -m src.gsm_test --send-sms +639568504890 --message-file /tmp/alert.txt
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ if str(_PROJECT) not in sys.path:
     sys.path.insert(0, str(_PROJECT))
 
 from src.config import SIM800L_BAUD, SIM800L_UART_DEVICE
-from src.gsm_sim800l import send_at
+from src.gsm_sim800l import GSMSIM800L, send_at
 
 try:
     import serial as serial_mod
@@ -67,12 +69,29 @@ def main() -> int:
     )
     ap.add_argument(
         "--send-sms",
-        nargs=2,
+        nargs="+",
         metavar=("PHONE", "MESSAGE"),
         default=None,
-        help="After diagnostics, send one test SMS (text mode)",
+        help="After diagnostics, send one SMS (use --message-file to avoid shell quoting issues)",
+    )
+    ap.add_argument(
+        "--message-file",
+        type=Path,
+        default=None,
+        help="SMS body from file (with --send-sms PHONE only)",
+    )
+    ap.add_argument(
+        "--send-alert-sms",
+        metavar="PHONE",
+        default=None,
+        help="Send full collision alert body from contacts.family.json (sample inside-Biñan GPS)",
     )
     args = ap.parse_args()
+
+    if args.message_file and (not args.send_sms or len(args.send_sms) != 1):
+        ap.error("--message-file requires exactly: --send-sms PHONE")
+    if args.send_alert_sms and args.send_sms:
+        ap.error("Use either --send-alert-sms or --send-sms, not both")
 
     dev = SIM800L_UART_DEVICE
     print("SmartShell — GSM isolated test\n")
@@ -144,23 +163,64 @@ def main() -> int:
         r = send_at(ser, "AT+COPS?", timeout=3.0)
         _print_ok(f"Operator: {r.replace(chr(13), ' ').strip()[:120]}")
 
-        if args.send_sms:
-            phone, message = args.send_sms[0], args.send_sms[1]
-            r = send_at(ser, "AT+CMGF=1", timeout=2.0)
-            if "OK" not in r:
-                _print_fail("Could not set text mode (AT+CMGF=1)")
-                return 1
-            r = send_at(ser, f'AT+CMGS="{phone}"', timeout=5.0)
-            if ">" not in r:
-                _print_fail("No SMS prompt (>)", repr(r[:200]))
-                return 1
-            time.sleep(0.2)
-            ser.write((message + "\x1a").encode())
-            r = send_at(ser, "", timeout=30.0)
-            if "OK" in r:
-                _print_ok(f"SMS sent to {phone}")
+        send_phone: str | None = None
+        send_message: str | None = None
+        if args.send_alert_sms:
+            from src import contacts
+
+            _, tpl, rider, home = contacts.load_family_contacts()
+            send_phone = str(args.send_alert_sms)
+            send_message = contacts.format_message(
+                tpl,
+                14.333122,
+                121.085377,
+                rider,
+                home,
+                area="Inside Biñan",
+                accident_barangay="Sto. Domingo",
+                notified="family (3), home: Zapote, accident: Sto. Domingo",
+            )
+            print(f"[INFO ] Alert body length: {len(send_message)} chars")
+        elif args.send_sms:
+            if args.message_file:
+                send_phone = args.send_sms[0]
+                send_message = args.message_file.read_text(encoding="utf-8")
+            elif len(args.send_sms) >= 2:
+                send_phone = args.send_sms[0]
+                send_message = " ".join(args.send_sms[1:])
             else:
-                _print_warn("SMS send unclear", repr(r[:300]))
+                _print_fail("--send-sms needs PHONE and MESSAGE, or PHONE with --message-file")
+                return 1
+            print(f"[INFO ] Message length: {len(send_message)} chars")
+
+        if send_phone and send_message is not None:
+            try:
+                ser.close()
+            except Exception:
+                pass
+            ser = None
+            modem = GSMSIM800L()
+            modem.open()
+            if modem._ser is None:  # noqa: SLF001 — bench test needs open serial
+                _print_fail("Could not open GSM serial for SMS send")
+                return 1
+            out = modem.send_sms_detailed(phone=send_phone, text=send_message)
+            modem.close()
+            raw = str(out.get("final_submit_response_raw", ""))
+            if bool(out.get("ok")):
+                _print_ok(
+                    f"SMS sent to {send_phone} "
+                    f"(reason={out.get('reason')}, CSQ={out.get('signal_strength')})"
+                )
+                if raw.strip():
+                    snippet = raw.replace("\r", " ").strip()[:200]
+                    print(f"       modem: {snippet}")
+            else:
+                _print_fail(
+                    f"SMS failed to {send_phone}: {out.get('reason')} "
+                    f"(cms={out.get('cms_error_code')})",
+                    repr(raw[:400]),
+                )
                 return 1
 
     finally:
