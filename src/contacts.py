@@ -15,6 +15,8 @@ from src.config import (
     CONTACTS_BARANGAY_FILE,
     CONTACTS_FAMILY_FILE,
     PROJECT_ROOT,
+    SMS_SINGLE_PART_MAX_CHARS,
+    SMS_SPLIT_PART_MAX_CHARS,
 )
 
 
@@ -185,3 +187,115 @@ def format_message(
     }
     used = {key for key in all_fields if f"{{{key}}}" in template}
     return template.format(**{k: all_fields[k] for k in used})
+
+
+_COMPACT_ALERT_TEMPLATE = (
+    "SMARTSHELL COLLISION\n"
+    "{name}\n"
+    "{area}\n"
+    "Home:{home_barangay} At:{accident_barangay}\n"
+    "{map_url}"
+)
+
+
+def format_alert_message(
+    template: str,
+    lat: float | None,
+    lon: float | None,
+    rider_name: str = "Unknown",
+    home_barangay: str = "Unknown",
+    area: str = "Unknown (no GPS)",
+    accident_barangay: str | None = None,
+    notified: str = "",
+    *,
+    max_chars: int | None = None,
+) -> str:
+    """
+    Format collision SMS for reliable single-part delivery.
+
+    Uses the configured template when it fits in one GSM part; otherwise a
+  shorter compact layout (no date/notified line). Truncates only as last resort.
+    """
+    limit = int(SMS_SINGLE_PART_MAX_CHARS if max_chars is None else max_chars)
+    body = format_message(
+        template,
+        lat,
+        lon,
+        rider_name=rider_name,
+        home_barangay=home_barangay,
+        area=area,
+        accident_barangay=accident_barangay,
+        notified=notified,
+    )
+    if len(body) <= limit:
+        return body
+
+    body = format_message(
+        _COMPACT_ALERT_TEMPLATE,
+        lat,
+        lon,
+        rider_name=rider_name,
+        home_barangay=home_barangay,
+        area=area,
+        accident_barangay=accident_barangay,
+        notified=notified,
+    )
+    if len(body) <= limit:
+        return body
+
+    if lat is not None and lon is not None:
+        short_map = f"https://maps.google.com/?q={lat:.4f},{lon:.4f}"
+    else:
+        short_map = "N/A"
+    body = (
+        f"SMARTSHELL COLLISION\n{rider_name[:24]}\n{area[:32]}\n"
+        f"Home:{home_barangay[:12]} At:{(accident_barangay or 'N/A')[:12]}\n{short_map}"
+    )
+    if len(body) > limit:
+        body = body[: limit - 3] + "..."
+    return body
+
+
+def split_message_for_sms(
+    text: str,
+    *,
+    max_chars: int | None = None,
+) -> list[str]:
+    """
+    Split text into separate single-part SMS bodies (not modem concat).
+
+    Use when the carrier accepts +CMGS but does not deliver long/concat messages.
+    """
+    limit = int(SMS_SPLIT_PART_MAX_CHARS if max_chars is None else max_chars)
+    if len(text) <= limit:
+        return [text]
+
+    chunks: list[str] = []
+    remaining = text
+    while remaining:
+        if len(remaining) <= limit:
+            chunks.append(remaining)
+            break
+        cut = limit
+        if " " in remaining[:cut]:
+            cut = remaining[:cut].rfind(" ") or cut
+        elif "\n" in remaining[:cut]:
+            cut = remaining[:cut].rfind("\n") or cut
+        chunk = remaining[:cut].strip()
+        if not chunk:
+            chunk = remaining[:limit]
+            cut = limit
+        chunks.append(chunk)
+        remaining = remaining[cut:].strip()
+
+    total = len(chunks)
+    if total == 1:
+        return chunks
+    return [f"({i}/{total}) {part}" for i, part in enumerate(chunks, start=1)]
+
+
+def message_parts_for_delivery(text: str) -> list[str]:
+    """One or more SMS bodies, each intended to fit a single GSM part."""
+    if len(text) <= SMS_SINGLE_PART_MAX_CHARS:
+        return [text]
+    return split_message_for_sms(text)

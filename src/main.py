@@ -887,7 +887,7 @@ def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool
         }
     )
 
-    message = contacts.format_message(
+    message = contacts.format_alert_message(
         template=template,
         lat=lat,
         lon=lon,
@@ -899,6 +899,11 @@ def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool
         else None,
         notified=str(route.get("notified", "")),
     )
+    if len(message) <= 160:
+        print(f"GSM SMS body: {len(message)} chars (single-part).")
+    else:
+        parts = contacts.message_parts_for_delivery(message)
+        print(f"GSM SMS body: {len(message)} chars → {len(parts)} separate SMS part(s).")
 
     modem = gsm_sim800l.GSMSIM800L(dry_run=dry_run)
     sent = 0

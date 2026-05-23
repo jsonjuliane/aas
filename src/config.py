@@ -94,6 +94,10 @@ GSM_MIN_CSQ_TO_SEND = 7  # Minimum usable CSQ to attempt SMS send (0–31; 99=un
 GSM_SEND_RETRY_COUNT = 2  # Per-recipient SMS send attempts
 GSM_SEND_RETRY_BACKOFF_SEC = 4.0  # Delay between SMS retries after signal is usable again
 GSM_SEND_RETRY_SIGNAL_WAIT_SEC = 8.0  # Max wait for CSQ to recover before each attempt/retry
+# SMS length: multipart/concat often fails to handsets on prepaid SIMs; prefer one part.
+SMS_SINGLE_PART_MAX_CHARS = 160
+SMS_SPLIT_PART_MAX_CHARS = 145  # body per part when splitting (room for "(1/2) " prefix)
+SMS_INTER_PART_DELAY_SEC = 2.0  # pause between separate CMGS when splitting
 
 # Paths (relative to project root)
 CONFIG_DIR = "config"

@@ -17,7 +17,9 @@ from src.config import (
     GSM_SEND_RETRY_SIGNAL_WAIT_SEC,
     GSM_WAIT_POLL_SEC,
     GSM_WAIT_REGISTER_SEC,
+    SMS_INTER_PART_DELAY_SEC,
 )
+from src.contacts import message_parts_for_delivery
 
 
 def probe_csq(probe: dict[str, object]) -> int:
@@ -183,16 +185,37 @@ def send_sms_with_retries(
             }
             return last, idx + 1
 
-        out = modem.send_sms_detailed(phone=phone, text=message)
+        parts = message_parts_for_delivery(message)
         last = {
-            "ok": bool(out.get("ok", False)),
-            "reason": str(out.get("reason", "unknown")),
-            "signal_strength": int(out.get("signal_strength", csq)),
-            "cmgs_response_raw": str(out.get("cmgs_response_raw", "")),
-            "final_submit_response_raw": str(out.get("final_submit_response_raw", "")),
-            "cms_error_code": out.get("cms_error_code"),
+            "ok": False,
+            "reason": "no_attempt",
+            "signal_strength": csq,
+            "cmgs_response_raw": "",
+            "final_submit_response_raw": "",
+            "cms_error_code": None,
+            "parts_sent": 0,
+            "parts_total": len(parts),
         }
+        for part_idx, part_text in enumerate(parts):
+            if part_idx > 0 and not dry_run:
+                time.sleep(max(0.0, float(SMS_INTER_PART_DELAY_SEC)))
+            out = modem.send_sms_detailed(phone=phone, text=part_text)
+            last = {
+                "ok": bool(out.get("ok", False)),
+                "reason": str(out.get("reason", "unknown")),
+                "signal_strength": int(out.get("signal_strength", csq)),
+                "cmgs_response_raw": str(out.get("cmgs_response_raw", "")),
+                "final_submit_response_raw": str(out.get("final_submit_response_raw", "")),
+                "cms_error_code": out.get("cms_error_code"),
+                "parts_sent": part_idx + 1 if bool(out.get("ok", False)) else part_idx,
+                "parts_total": len(parts),
+            }
+            if not bool(last["ok"]):
+                last["reason"] = f"part_{part_idx + 1}_of_{len(parts)}:{last['reason']}"
+                break
         if bool(last["ok"]):
+            if len(parts) > 1:
+                last["reason"] = f"ok_split_{len(parts)}_parts"
             return last, idx + 1
 
         if idx >= (retries - 1):

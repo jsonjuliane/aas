@@ -5,6 +5,7 @@ Unit tests for GSM alert policy — run: python -m src.gsm_alert_test
 from __future__ import annotations
 
 from src.gsm_alert import is_usable_csq, not_ready_reason, probe_csq, probe_sms_ready
+from src.contacts import format_alert_message, message_parts_for_delivery, split_message_for_sms
 from src.gsm_sim800l import _cmgs_submit_ok, _cmgs_submit_timeout_sec
 
 
@@ -43,6 +44,21 @@ def main() -> int:
     _check("cmgs ok response", _cmgs_submit_ok("+CMGS: 12\r\n\r\nOK\r\n"))
     _check("cms error not ok", not _cmgs_submit_ok("+CMS ERROR: 500\r\n"))
     _check("long sms timeout", _cmgs_submit_timeout_sec("x" * 280) >= 20.0)
+
+    long_tpl = "SMARTSHELL UPDATE: COLLISION DETECTED\nName: {name}\nArea: {area}\n" * 3
+    compact = format_alert_message(
+        long_tpl,
+        14.33,
+        121.08,
+        rider_name="Juan Dela Cruz",
+        home_barangay="Zapote",
+        area="Inside Biñan",
+        accident_barangay="Sto. Domingo",
+    )
+    _check("compact alert fits one part", len(compact) <= 160)
+    parts = message_parts_for_delivery("x" * 200)
+    _check("split long body", len(parts) >= 2)
+    _check("split parts fit limit", all(len(p) <= 160 for p in split_message_for_sms("x" * 200)))
 
     print("All gsm_alert policy checks passed.")
     return 0

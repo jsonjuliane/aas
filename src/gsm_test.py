@@ -22,6 +22,7 @@ if str(_PROJECT) not in sys.path:
     sys.path.insert(0, str(_PROJECT))
 
 from src.config import SIM800L_BAUD, SIM800L_UART_DEVICE
+from src import gsm_alert
 from src.gsm_sim800l import GSMSIM800L, send_at
 
 try:
@@ -170,7 +171,7 @@ def main() -> int:
 
             _, tpl, rider, home = contacts.load_family_contacts()
             send_phone = str(args.send_alert_sms)
-            send_message = contacts.format_message(
+            send_message = contacts.format_alert_message(
                 tpl,
                 14.333122,
                 121.085377,
@@ -180,7 +181,14 @@ def main() -> int:
                 accident_barangay="Sto. Domingo",
                 notified="family (3), home: Zapote, accident: Sto. Domingo",
             )
-            print(f"[INFO ] Alert body length: {len(send_message)} chars")
+            parts = contacts.message_parts_for_delivery(send_message)
+            print(
+                f"[INFO ] Alert body: {len(send_message)} chars, "
+                f"{len(parts)} SMS part(s) to send"
+            )
+            print("--- message ---")
+            print(send_message)
+            print("--- end ---")
         elif args.send_sms:
             if args.message_file:
                 send_phone = args.send_sms[0]
@@ -204,13 +212,18 @@ def main() -> int:
             if modem._ser is None:  # noqa: SLF001 — bench test needs open serial
                 _print_fail("Could not open GSM serial for SMS send")
                 return 1
-            out = modem.send_sms_detailed(phone=send_phone, text=send_message)
+            out, _attempts = gsm_alert.send_sms_with_retries(
+                modem=modem, phone=send_phone, message=send_message
+            )
             modem.close()
             raw = str(out.get("final_submit_response_raw", ""))
             if bool(out.get("ok")):
+                parts_note = ""
+                if int(out.get("parts_total", 1)) > 1:
+                    parts_note = f", parts={out.get('parts_sent')}/{out.get('parts_total')}"
                 _print_ok(
                     f"SMS sent to {send_phone} "
-                    f"(reason={out.get('reason')}, CSQ={out.get('signal_strength')})"
+                    f"(reason={out.get('reason')}, CSQ={out.get('signal_strength')}{parts_note})"
                 )
                 if raw.strip():
                     snippet = raw.replace("\r", " ").strip()[:200]

@@ -68,7 +68,7 @@ def _run_case(
     print(f"  Recipients ({len(route['phones'])}): {route.get('phones')}")
     print(f"  Notified: {route.get('notified')}")
     if sms_preview:
-        body = contacts.format_message(
+        body = contacts.format_alert_message(
             template=template,
             lat=lat,
             lon=lon,
