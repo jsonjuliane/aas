@@ -45,13 +45,18 @@ python -m src.main --dry-run                    # No hardware; simulate
 python -m src.main --core-flow-only             # Sensor monitoring only; skip alert action
 python -m src.main --test-alert                 # Full alert cycle immediately (bench test)
 python -m src.main --test-alert --disable-sms-send  # Full alert without sending SMS
+python -m src.main --test-alert --test-lat 14.299 --test-lon 121.060 --disable-sms-send  # Spoof GPS (e.g. Langkiwa)
+
+# Routing / geofence (no hardware; needs shapely + libgeos-dev)
+python -m src.routing_test                      # Quick inside/outside + recipient samples
+python -m src.routing_matrix_test               # All 7 barangay centroids + outside + no GPS
+python -m src.routing_matrix_test --sms-preview # Same + print SMS body per scenario
 
 # Hardware diagnostics
 python -m src.hardware_check                    # Full hardware probe (exit 1 on any FAIL)
 python -m src.gsm_test                          # GSM: baud sweep, SIM, signal
 python -m src.gsm_alert_test                    # GSM policy checks (no hardware)
 python -m src.gps_test                          # GPS: NMEA stream, $GPGGA fixes
-python -m src.routing_test                      # Biñan geofence: inside/outside sample points
 python -m src.mpu_collision_test                # MPU: tap/collision JSONL test
 
 # Audio / MP3 (module reserved for future use)

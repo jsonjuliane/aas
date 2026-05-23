@@ -9,6 +9,7 @@ Usage:
     python -m src.main --dry-run        # No hardware; simulate for development
     python -m src.main --core-flow-only # Init + monitor impact detection only
     python -m src.main --test-alert     # Run one full alert cycle immediately (bench test)
+    python -m src.main --test-alert --test-lat 14.299 --test-lon 121.060 --disable-sms-send  # Spoof GPS (Langkiwa)
 """
 
 from __future__ import annotations
@@ -269,6 +270,7 @@ def run(
     poll_interval_sec: float = 0.05,
     action_cooldown_sec: float = ACTION_COOLDOWN_SEC,
     impact_log_cooldown_sec: float = IMPACT_LOG_COOLDOWN_SEC,
+    test_location: tuple[float, float] | None = None,
 ) -> None:
     """
     Main loop: monitor sensor, on impact play countdown audio then exit.
@@ -317,6 +319,7 @@ def run(
                         disable_sms_send=disable_sms_send,
                         voice_cancel_keyword=voice_cancel_keyword,
                         voice_device_index=voice_device_index,
+                        test_location=test_location,
                     )
                 return
 
@@ -407,6 +410,7 @@ def run(
                         disable_sms_send=disable_sms_send,
                         voice_cancel_keyword=voice_cancel_keyword,
                         voice_device_index=voice_device_index,
+                        test_location=test_location,
                     )
                     return
             time.sleep(poll_interval_sec)
@@ -426,10 +430,11 @@ def _handle_alert(
     disable_sms_send: bool,
     voice_cancel_keyword: str,
     voice_device_index: int | None,
+    test_location: tuple[float, float] | None = None,
 ) -> None:
     """Play countdown audio and log event for this phase."""
     ax, ay, az = sensor.read_g() if not dry_run else (0.0, 0.0, 0.0)
-    location = _resolve_collision_location(dry_run=dry_run)
+    location = _resolve_collision_location(dry_run=dry_run, test_location=test_location)
     track_num, selection_reason = _select_countdown_audio(audio_mod=audio_mod, dry_run=dry_run)
 
     voice_ctx = _prepare_voice_cancel(dry_run, voice_cancel_keyword, voice_device_index)
@@ -716,8 +721,20 @@ def _wait_for_cancel_window(
             buzzer_hw.silence()
 
 
-def _resolve_collision_location(dry_run: bool) -> dict | None:
-    """Attempt GPS fix at collision time for logging."""
+def _resolve_collision_location(
+    dry_run: bool,
+    test_location: tuple[float, float] | None = None,
+) -> dict | None:
+    """Attempt GPS fix at collision time for logging (or use spoofed test coordinates)."""
+    if test_location is not None:
+        lat, lon = test_location
+        print(f"GPS spoof (test): lat={lat}, lon={lon}")
+        return {
+            "lat": float(lat),
+            "lon": float(lon),
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+            "source": "test_spoof",
+        }
     if dry_run:
         return {
             "lat": 0.0,
@@ -1015,6 +1032,18 @@ def main() -> int:
         help="Do not send real SMS; log that SMS is intentionally disabled",
     )
     ap.add_argument(
+        "--test-lat",
+        type=float,
+        default=None,
+        help="Spoof GPS latitude for --test-alert only (requires --test-lon)",
+    )
+    ap.add_argument(
+        "--test-lon",
+        type=float,
+        default=None,
+        help="Spoof GPS longitude for --test-alert only (requires --test-lat)",
+    )
+    ap.add_argument(
         "--voice-cancel-keyword",
         type=str,
         default="cancel",
@@ -1045,6 +1074,13 @@ def main() -> int:
     )
     args = ap.parse_args()
     test_now = args.test_alert or args.trigger
+    test_location: tuple[float, float] | None = None
+    if args.test_lat is not None or args.test_lon is not None:
+        if not test_now:
+            ap.error("--test-lat/--test-lon are only allowed with --test-alert")
+        if args.test_lat is None or args.test_lon is None:
+            ap.error("--test-lat and --test-lon must be used together")
+        test_location = (float(args.test_lat), float(args.test_lon))
     run(
         dry_run=args.dry_run,
         core_flow_only=args.core_flow_only,
@@ -1054,6 +1090,7 @@ def main() -> int:
         voice_device_index=args.voice_device_index,
         action_cooldown_sec=args.action_cooldown_sec,
         impact_log_cooldown_sec=args.impact_log_cooldown_sec,
+        test_location=test_location,
     )
     return 0
 
