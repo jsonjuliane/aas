@@ -56,6 +56,9 @@ python -m src.routing_matrix_test --sms-preview # Same + print SMS body per scen
 python -m src.hardware_check                    # Full hardware probe (exit 1 on any FAIL)
 python -m src.gsm_test                          # GSM: baud sweep, SIM, signal
 python -m src.gsm_test --send-test-sms +639XXXXXXXXX  # Short "Test text" via alert send path
+python -m src.gsm_sms_matrix_test --list              # SMS delivery diagnostic cases
+python -m src.gsm_sms_matrix_test --phone +639XXXXXXXXX --dry-run
+python -m src.gsm_sms_matrix_test --phone +639XXXXXXXXX --confirm  # Sends [SS01]..[SS21] (12s apart)
 python -m src.gsm_alert_test                    # GSM policy checks (no hardware)
 python -m src.gps_test                          # GPS: NMEA stream, $GPGGA fixes
 python -m src.mpu_collision_test                # MPU: tap/collision JSONL test
