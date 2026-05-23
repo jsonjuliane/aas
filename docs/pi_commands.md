@@ -36,6 +36,32 @@ python3 -m src.main --help
 
 ---
 
+## SMS deploy checklist (after `git pull`)
+
+Use this after updating code so the Pi does **not** keep the old `SMARTSHELL UPDATE` template (causes `BiA@an` and failed delivery).
+
+```bash
+cd ~/AccidentAlertSystem
+git pull
+source .venv/bin/activate
+
+# 1) Config must say COLLISION ALERT (not UPDATE). If needed, copy example then re-edit phones:
+grep message_template config/contacts.family.json
+# Should include: SMARTSHELL COLLISION ALERT and GPS: (coords only, not https URL)
+
+# 2) Verify sample body is ASCII, ~154 chars, 1 SMS part:
+python -m src.sms_config_check
+
+# 3) Send one real-format alert to your phone (no [SSnn] tag):
+python -m src.sms_config_check --send-test +639XXXXXXXXX
+# Or: python -m src.gsm_test --send-alert-sms +639XXXXXXXXX
+
+# 4) Full collision test (optional):
+python -m src.main --test-alert --test-lat 14.333 --test-lon 121.085
+```
+
+---
+
 ## Run modes (same interpreter as above)
 
 ```bash

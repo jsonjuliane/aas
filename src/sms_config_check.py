@@ -17,7 +17,7 @@ from src.config import SMS_ALERT_TARGET_MAX_CHARS, SMS_SINGLE_PART_MAX_CHARS
 _DEPRECATED_MARKERS = (
     "SMARTSHELL UPDATE",
     "{notified}",
-    "Google Map:",
+    "https://maps.google.com",
     "Accident barangay:",
 )
 _EXPECTED_MARKERS = (

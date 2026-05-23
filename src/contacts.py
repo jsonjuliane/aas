@@ -158,6 +158,7 @@ def format_message(
     notified: str = "",
     *,
     map_precision: int = 6,
+    sms_plain_coords: bool = False,
 ) -> str:
     """
     Format message with rider name, area, barangays, notified summary, date, and map link.
@@ -166,12 +167,16 @@ def format_message(
         template: Template with optional placeholders (see module default).
         accident_barangay: Resolved accident barangay, or None outside Biñan / no GPS.
         notified: Summary of recipient groups from routing.
+        sms_plain_coords: If True, {map_url} is "lat, lon" only (Globe often blocks https URLs).
     """
     from datetime import datetime
 
     if lat is not None and lon is not None:
         prec = max(0, min(8, int(map_precision)))
-        map_url = f"https://maps.google.com/?q={lat:.{prec}f},{lon:.{prec}f}"
+        if sms_plain_coords:
+            map_url = f"{lat:.{prec}f}, {lon:.{prec}f}"
+        else:
+            map_url = f"https://maps.google.com/?q={lat:.{prec}f},{lon:.{prec}f}"
     else:
         map_url = "N/A"
     if accident_barangay:
@@ -202,7 +207,7 @@ _FORMAL_ALERT_TEMPLATE = (
     "Area: {area}\n"
     "Home: {home_barangay} | Accident: {accident_barangay}\n"
     "\n"
-    "Map: {map_url}"
+    "GPS: {map_url}"
 )
 
 # GSM 7-bit cannot encode e.g. n-tilde in "Binan"; UCS-2 often fails on prepaid SIMs.
@@ -283,6 +288,7 @@ def format_alert_message(
                 accident_barangay=safe_accident or None,
                 notified=sms_safe_for_gsm7(notified),
                 map_precision=map_precision,
+                sms_plain_coords=True,
             )
         )
 
@@ -292,7 +298,7 @@ def format_alert_message(
             return body
 
     if lat is not None and lon is not None:
-        short_map = f"https://maps.google.com/?q={lat:.3f},{lon:.3f}"
+        short_map = f"{lat:.4f}, {lon:.4f}"
     else:
         short_map = "N/A"
     body = (
@@ -300,7 +306,7 @@ def format_alert_message(
         f"Rider: {safe_name[:28]}\n"
         f"Area: {safe_area[:28]}\n"
         f"Home: {safe_home[:14]} | Accident: {(safe_accident or 'N/A')[:14]}\n\n"
-        f"Map: {short_map}"
+        f"GPS: {short_map}"
     )
     if len(body) > limit:
         body = body[: limit - 3] + "..."

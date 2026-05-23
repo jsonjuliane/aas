@@ -16,7 +16,7 @@ import argparse
 import json
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from src import contacts, gsm_alert, gsm_sim800l
@@ -65,7 +65,7 @@ def build_matrix_cases() -> list[SmsMatrixCase]:
         "Rider: Juan Dela Cruz\n"
         "Area: Inside Binan\n"
         "Home: Zapote | Accident: Sto. Domingo\n\n"
-        "Map: https://maps.google.com/?q=14.3331,121.0854"
+        "GPS: 14.3331, 121.0854"
     )
 
     cases: list[SmsMatrixCase] = [
@@ -100,8 +100,15 @@ def build_matrix_cases() -> list[SmsMatrixCase]:
         ),
         SmsMatrixCase(
             "12",
-            "URL only",
+            "URL only (https)",
             _tag("12", "Map: https://maps.google.com/?q=14.333,121.085"),
+            note="Globe often blocks; modem OK but no delivery",
+        ),
+        SmsMatrixCase(
+            "22",
+            "GPS coords only (no URL)",
+            _tag("22", "GPS: 14.333122, 121.085377"),
+            note="Production map line format",
         ),
         SmsMatrixCase(
             "13",
@@ -241,7 +248,7 @@ def run_matrix(
             ok = bool(out.get("ok"))
             raw = str(out.get("final_submit_response_raw", ""))[:200]
             record = {
-                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                 "case_id": c.case_id,
                 "name": c.name,
                 "phone": phone,
