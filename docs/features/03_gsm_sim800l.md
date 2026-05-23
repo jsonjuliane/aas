@@ -64,11 +64,31 @@ Configured in `src/config.py`:
 
 **Per recipient:** Before each attempt, wait up to `GSM_SEND_RETRY_SIGNAL_WAIT_SEC` for CSQ ≥ minimum. On failure, wait for usable signal again before the second attempt; if signal stays weak, retry is skipped (`weak_signal_retry_aborted`).
 
+## Google Map links in SMS (Philippines / Globe)
+
+**Production collision alerts use plain coordinates** (`GPS: 14.3331, 121.0854`), not an `https://` URL.
+
+Reason: On **Globe** (and similar PH carriers), **person-to-person SMS with clickable links are often blocked at the network** — the SIM800L can still report success (`+CMGS`, `OK`) while the phone never receives the text. See [Globe help: blocking texts with clickable links](https://www.globe.com.ph/help/why-globe-blocks-texts-with-clickable-links).
+
+**Maps URLs (no API key)** — for bench tests only:
+
+| Style | Example |
+|-------|---------|
+| `legacy` | `https://maps.google.com/?q=14.333122,121.085377` |
+| `google_search` | `https://www.google.com/maps/search/?api=1&query=14.333122%2C121.085377` |
+| `google_com` | `https://www.google.com/maps?q=14.333122,121.085377` |
+
+There is **no supported public API** to generate `maps.app.goo.gl` short links from a Pi; those are created in the Google Maps app share UI.
+
+**Alternatives if links are required:** WhatsApp/SMS app bypass, Globe **A2P/registered sender** (business SMS, not SIM800L P2P), or keep **GPS coordinates** in SMS.
+
 ## Isolated bench test
 
 ```bash
 python -m src.gsm_test
 python -m src.gsm_test --send-sms +639171234567 "Test message"
+python -m src.gsm_test --send-map-url-test +639171234567
+python -m src.gsm_test --send-map-url-test +639171234567 --map-url-style google_search
 python -m src.gsm_alert_test   # Policy unit checks (no hardware)
 ```
 

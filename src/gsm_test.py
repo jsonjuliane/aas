@@ -6,6 +6,7 @@ Run on Raspberry Pi:
     python -m src.gsm_test --send-sms +639171234567 "Test message"
     python -m src.gsm_test --send-alert-sms +639568504890
     python -m src.gsm_test --send-test-sms +639568504890
+    python -m src.gsm_test --send-map-url-test +639568504890
     python -m src.gsm_test --send-sms +639568504890 --message-file /tmp/alert.txt
 """
 
@@ -99,15 +100,52 @@ def main() -> int:
         default=None,
         help=f'Override bench SMS body (with --send-test-sms; default "{GSM_BENCH_TEST_TEXT}")',
     )
+    ap.add_argument(
+        "--send-map-url-test",
+        metavar="PHONE",
+        default=None,
+        help='Send only "Google Map: <url>" (bench; Globe may block delivery)',
+    )
+    ap.add_argument(
+        "--map-url-style",
+        choices=("legacy", "google_search", "google_com"),
+        default="legacy",
+        help="URL format for --send-map-url-test (default: maps.google.com/?q=)",
+    )
+    ap.add_argument(
+        "--map-url",
+        default=None,
+        help="Use this exact URL in --send-map-url-test instead of --map-url-style",
+    )
+    ap.add_argument(
+        "--test-lat",
+        type=float,
+        default=14.333122,
+        help="Latitude for map URL tests (default: sample Biñan)",
+    )
+    ap.add_argument(
+        "--test-lon",
+        type=float,
+        default=121.085377,
+        help="Longitude for map URL tests",
+    )
     args = ap.parse_args()
 
     send_modes = sum(
         1
-        for x in (args.send_sms, args.send_alert_sms, args.send_test_sms)
+        for x in (
+            args.send_sms,
+            args.send_alert_sms,
+            args.send_test_sms,
+            args.send_map_url_test,
+        )
         if x is not None
     )
     if send_modes > 1:
-        ap.error("Use only one of: --send-sms, --send-alert-sms, --send-test-sms")
+        ap.error(
+            "Use only one send mode: --send-sms, --send-alert-sms, "
+            "--send-test-sms, --send-map-url-test"
+        )
     if args.message_file and (not args.send_sms or len(args.send_sms) != 1):
         ap.error("--message-file requires exactly: --send-sms PHONE")
     if args.test_text and not args.send_test_sms:
@@ -189,6 +227,21 @@ def main() -> int:
             send_phone = str(args.send_test_sms)
             send_message = str(args.test_text if args.test_text is not None else GSM_BENCH_TEST_TEXT)
             print(f'[INFO ] Bench test SMS: {len(send_message)} chars, body="{send_message}"')
+        elif args.send_map_url_test:
+            from src import contacts
+
+            send_phone = str(args.send_map_url_test)
+            send_message = contacts.format_google_map_test_sms(
+                float(args.test_lat),
+                float(args.test_lon),
+                style=str(args.map_url_style),
+                custom_url=args.map_url,
+            )
+            print(
+                f"[INFO ] Map URL test ({args.map_url_style}): {len(send_message)} chars\n"
+                f"       Globe P2P SMS often blocks https links (+CMGS may still be OK).\n"
+                f"       Body:\n{send_message}"
+            )
         elif args.send_alert_sms:
             from src import contacts
 

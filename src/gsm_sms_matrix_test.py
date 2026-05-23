@@ -100,9 +100,12 @@ def build_matrix_cases() -> list[SmsMatrixCase]:
         ),
         SmsMatrixCase(
             "12",
-            "URL only (https)",
-            _tag("12", "Map: https://maps.google.com/?q=14.333,121.085"),
-            note="Globe often blocks; modem OK but no delivery",
+            "Google Map URL (legacy)",
+            _tag(
+                "12",
+                contacts.format_google_map_test_sms(14.333122, 121.085377, style="legacy"),
+            ),
+            note="Globe P2P often blocks https; modem +CMGS may still OK",
         ),
         SmsMatrixCase(
             "22",

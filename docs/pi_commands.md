@@ -85,6 +85,8 @@ python -m src.sms_config_check                     # Verify contacts.family.json
 python -m src.sms_config_check --send-test +639XXXXXXXXX  # Check then send one production alert
 python -m src.gsm_test --send-test-sms +639XXXXXXXXX  # Short "Test text" via alert send path
 python -m src.gsm_test --send-alert-sms +639XXXXXXXXX   # Production-format alert (no [SSnn] tag)
+python -m src.gsm_test --send-map-url-test +639XXXXXXXXX  # Bench: "Google Map: https://..." only
+python -m src.gsm_test --send-map-url-test +639XXXXXXXXX --map-url-style google_search
 python -m src.gsm_sms_matrix_test --list              # SMS delivery diagnostic cases
 python -m src.gsm_sms_matrix_test --phone +639XXXXXXXXX --dry-run
 python -m src.gsm_sms_matrix_test --phone +639XXXXXXXXX --confirm  # Sends [SS01]..[SS21] (12s apart)

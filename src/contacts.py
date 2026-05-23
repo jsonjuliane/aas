@@ -356,3 +356,52 @@ def message_parts_for_delivery(text: str) -> list[str]:
     if len(text) <= SMS_SINGLE_PART_MAX_CHARS:
         return [text]
     return split_message_for_sms(text)
+
+
+def google_map_url(
+    lat: float,
+    lon: float,
+    *,
+    style: str = "legacy",
+    map_precision: int = 6,
+) -> str:
+    """
+    Build a Google Maps HTTPS URL for bench tests.
+
+    Styles:
+        legacy — https://maps.google.com/?q=lat,lon (short; blocked on Globe P2P SMS)
+        google_search — official Maps URL API search form
+        google_com — https://www.google.com/maps?q=lat,lon
+    """
+    prec = max(0, min(8, int(map_precision)))
+    lat_s = f"{lat:.{prec}f}"
+    lon_s = f"{lon:.{prec}f}"
+    key = style.strip().lower()
+    if key == "google_search":
+        return (
+            f"https://www.google.com/maps/search/?api=1&query={lat_s}%2C{lon_s}"
+        )
+    if key in ("google_com", "www"):
+        return f"https://www.google.com/maps?q={lat_s},{lon_s}"
+    return f"https://maps.google.com/?q={lat_s},{lon_s}"
+
+
+def format_google_map_test_sms(
+    lat: float,
+    lon: float,
+    *,
+    style: str = "legacy",
+    label: str = "Google Map",
+    custom_url: str | None = None,
+) -> str:
+    """
+  Bench-only body: ``Google Map: <url>`` (original label style).
+
+  Production alerts use plain ``GPS: lat, lon`` because Globe often drops P2P SMS
+  that contain https links (modem may still return +CMGS OK).
+    """
+    if custom_url is not None:
+        url = custom_url.strip()
+    else:
+        url = google_map_url(lat, lon, style=style)
+    return sms_safe_for_gsm7(f"{label}: {url}")
