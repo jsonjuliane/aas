@@ -199,8 +199,9 @@ def format_message(
     return template.format(**{k: all_fields[k] for k in used})
 
 
-# Formal ASCII paragraph layout (GSM 7-bit safe). Used when config template is too long.
-_FORMAL_ALERT_TEMPLATE = (
+# Production collision SMS (GSM 7-bit, single-part, no https URL — Globe blocks map links).
+# Placeholders: {name} {area} {home_barangay} {accident_barangay} {map_url} (lat, lon only).
+FINAL_SMS_ALERT_TEMPLATE = (
     "SMARTSHELL COLLISION ALERT\n"
     "\n"
     "Rider: {name}\n"
@@ -209,6 +210,7 @@ _FORMAL_ALERT_TEMPLATE = (
     "\n"
     "GPS: {map_url}"
 )
+_FORMAL_ALERT_TEMPLATE = FINAL_SMS_ALERT_TEMPLATE
 
 # GSM 7-bit cannot encode e.g. n-tilde in "Binan"; UCS-2 often fails on prepaid SIMs.
 _SMS_CHAR_REPLACEMENTS: dict[str, str] = {
@@ -395,10 +397,10 @@ def format_google_map_test_sms(
     custom_url: str | None = None,
 ) -> str:
     """
-  Bench-only body: ``Google Map: <url>`` (original label style).
+    Bench-only body: ``Google Map: <url>`` (original label style).
 
-  Production alerts use plain ``GPS: lat, lon`` because Globe often drops P2P SMS
-  that contain https links (modem may still return +CMGS OK).
+    Production alerts use plain ``GPS: lat, lon`` because Globe often drops P2P SMS
+    that contain https links (modem may still return +CMGS OK).
     """
     if custom_url is not None:
         url = custom_url.strip()

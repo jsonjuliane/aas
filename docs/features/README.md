@@ -13,6 +13,7 @@ Each document describes one feature: hardware and interface.
 | 07 | Location routing (Phase 2) | [07_routing.md](07_routing.md) |
 | 08 | Event logging | [08_logging.md](08_logging.md) |
 | 09 | Voice keyword cancel | [09_voice_cancel.md](09_voice_cancel.md) |
+| 11 | Collision SMS format | [11_sms_alert_format.md](11_sms_alert_format.md) |
 
 See also:
 

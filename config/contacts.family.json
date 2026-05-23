@@ -1,20 +1,20 @@
 {
-  "_comment": "Family/emergency SMS recipients. Do not share publicly.",
+  "_comment": "TESTING: all family phones set to 09568504890. Revert before production deploy.",
   "version": 1,
   "contacts": [
     {
       "name": "Primary contact",
-      "phone": "09217679405",
+      "phone": "09568504890",
       "priority": 1
     },
     {
       "name": "JM",
-      "phone": "09202828670",
+      "phone": "09568504890",
       "priority": 2
     },
     {
       "name": "Juls",
-      "phone": "09278222260",
+      "phone": "09568504890",
       "priority": 3
     }
   ],

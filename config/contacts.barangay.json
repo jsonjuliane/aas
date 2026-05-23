@@ -1,14 +1,14 @@
 {
-  "_comment": "Barangay rescuer phones for Biñan routing. Names must match subject_home_barangay in contacts.family.json.",
+  "_comment": "TESTING: all rescuer phones set to +639568504890. Revert before production deploy.",
   "version": 1,
   "barangays": [
-    { "name": "Zapote", "rescuer_phone": "+639152220591" },
-    { "name": "Timbao", "rescuer_phone": "+639611471347" },
-    { "name": "Mamplasan", "rescuer_phone": "+639471131019" },
-    { "name": "Delapaz", "rescuer_phone": "+639858496438" },
-    { "name": "Langkiwa", "rescuer_phone": "+639651483847" },
-    { "name": "Loma", "rescuer_phone": "+639629776296" },
-    { "name": "Sto. Domingo", "rescuer_phone": "+639364069485" }
+    { "name": "Zapote", "rescuer_phone": "+639568504890" },
+    { "name": "Timbao", "rescuer_phone": "+639568504890" },
+    { "name": "Mamplasan", "rescuer_phone": "+639568504890" },
+    { "name": "Delapaz", "rescuer_phone": "+639568504890" },
+    { "name": "Langkiwa", "rescuer_phone": "+639568504890" },
+    { "name": "Loma", "rescuer_phone": "+639568504890" },
+    { "name": "Sto. Domingo", "rescuer_phone": "+639568504890" }
   ],
-  "default_rescuer_phone": "+639152220591"
+  "default_rescuer_phone": "+639568504890"
 }
