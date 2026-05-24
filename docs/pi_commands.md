@@ -57,8 +57,11 @@ python -m src.sms_config_check --send-test +639XXXXXXXXX
 # Or: python -m src.gsm_test --send-alert-sms +639XXXXXXXXX
 
 # 4) Full collision test (optional):
-python -m src.main --test-alert --test-lat-lng 14.333 121.085 --disable-sms-send   # mock GPS, SMS format only
-python -m src.main --test-alert --test-lat 14.333 --test-lon 121.085 --disable-sms-send
+python -m src.main --test-alert --test-lat-lng 14.333 121.085 --disable-sms-send
+python -m src.main --test-alert --test-lat-lng 14.333 121.085 --test-accident-mode geocode
+python -m src.main --test-alert --test-lat-lng 14.333 121.085 --test-accident-mode polygon
+python -m src.main --test-alert --test-lat-lng 14.333 121.085 --test-accident-mode centroid
+python -m src.main --test-alert --test-lat-lng 14.333 121.085 --test-accident-mode coordinates
 ```
 
 ---

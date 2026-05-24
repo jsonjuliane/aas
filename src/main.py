@@ -9,8 +9,9 @@ Usage:
     python -m src.main --dry-run        # No hardware; simulate for development
     python -m src.main --core-flow-only # Init + monitor impact detection only
     python -m src.main --test-alert     # Run one full alert cycle immediately (bench test)
-    python -m src.main --test-alert --test-lat-lng 14.299 121.060 --disable-sms-send  # Mock GPS (no fix)
-    python -m src.main --test-alert --test-lat 14.299 --test-lon 121.060 --disable-sms-send
+    python -m src.main --test-alert --test-lat-lng 14.299 121.060 --disable-sms-send  # Mock GPS
+    python -m src.main --test-alert --test-lat-lng 14.333 121.085 --test-accident-mode polygon
+    python -m src.main --test-alert --test-lat-lng 14.333 121.085 --test-accident-mode geocode
 """
 
 from __future__ import annotations
@@ -293,6 +294,7 @@ def run(
     post_alert_cooldown_sec: float = POST_ALERT_COOLDOWN_SEC,
     impact_log_cooldown_sec: float = IMPACT_LOG_COOLDOWN_SEC,
     test_location: tuple[float, float] | None = None,
+    test_accident_mode: str | None = None,
 ) -> None:
     """
     Main loop: monitor sensor; on impact run countdown + SMS, then resume monitoring.
@@ -301,6 +303,7 @@ def run(
         dry_run: If True, no hardware access; simulate.
         core_flow_only: If True, skip countdown/cancel/GPS/SMS side effects.
         test_alert_immediately: If True, run one full alert cycle on first loop (bench test).
+        test_accident_mode: With --test-alert, force Accident SMS resolver (geocode, polygon, centroid, etc.).
         poll_interval_sec: Seconds between sensor polls.
     """
     sensor = sensor_mpu6050.SensorMPU6050(dry_run=dry_run)
@@ -345,6 +348,7 @@ def run(
                             voice_cancel_keyword=voice_cancel_keyword,
                             voice_device_index=voice_device_index,
                             test_location=test_location,
+                            test_accident_mode=test_accident_mode,
                         )
                     finally:
                         last_alert_cycle_end_at = time.monotonic()
@@ -444,6 +448,7 @@ def run(
                             voice_cancel_keyword=voice_cancel_keyword,
                             voice_device_index=voice_device_index,
                             test_location=test_location,
+                            test_accident_mode=test_accident_mode,
                         )
                     finally:
                         last_alert_cycle_end_at = time.monotonic()
@@ -467,6 +472,7 @@ def _handle_alert(
     voice_cancel_keyword: str,
     voice_device_index: int | None,
     test_location: tuple[float, float] | None = None,
+    test_accident_mode: str | None = None,
 ) -> None:
     """Run countdown cancel window (buzzer or optional MP3) and SMS if not cancelled."""
     ax, ay, az = sensor.read_g() if not dry_run else (0.0, 0.0, 0.0)
@@ -615,7 +621,12 @@ def _handle_alert(
             "collision_location": location,
         }
     )
-    _send_alert_sms(location=location, dry_run=dry_run, disable_sms_send=disable_sms_send)
+    _send_alert_sms(
+        location=location,
+        dry_run=dry_run,
+        disable_sms_send=disable_sms_send,
+        test_accident_mode=test_accident_mode,
+    )
 
 
 def _wait_for_cancel_window(
@@ -849,7 +860,13 @@ def _select_countdown_audio(audio_mod: audio_mp3.AudioMP3, dry_run: bool) -> tup
     return track, f"TF reports {n} file(s); playing track index {track}"
 
 
-def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool) -> None:
+def _send_alert_sms(
+    location: dict | None,
+    dry_run: bool,
+    disable_sms_send: bool,
+    *,
+    test_accident_mode: str | None = None,
+) -> None:
     """Send SMS alerts and log success/failure with reasons."""
     if disable_sms_send:
         msg = "sms should have been sent, currently disabled for testing voice cancellation"
@@ -896,7 +913,20 @@ def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool
 
     from src import routing
 
-    accident_sms, accident_details = routing.resolve_accident_sms_address(lat, lon)
+    force_mode = (
+        str(test_accident_mode).strip().lower()
+        if test_accident_mode and str(test_accident_mode).strip().lower() != "auto"
+        else None
+    )
+    if force_mode:
+        print(f"Test Accident resolver mode: {force_mode} (bench; overrides production auto chain)")
+        accident_sms, accident_details = routing.resolve_accident_sms_address_mode(
+            lat,
+            lon,
+            mode=force_mode,  # type: ignore[arg-type]
+        )
+    else:
+        accident_sms, accident_details = routing.resolve_accident_sms_address(lat, lon)
     area = "Unknown (no GPS)"
     if lat is not None and lon is not None:
         try:
@@ -941,9 +971,10 @@ def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool
         }
     )
 
-    accident_sms = route.get("accident_location") or accident_sms
-    if accident_sms in (None, ""):
-        accident_sms = routing.resolve_accident_sms_address(lat, lon)[0]
+    if not force_mode:
+        accident_sms = route.get("accident_location") or accident_sms
+        if accident_sms in (None, ""):
+            accident_sms = routing.resolve_accident_sms_address(lat, lon)[0]
     loc_detail = route.get("accident_location_details") or accident_details
     print(
         f"Accident SMS label: {accident_sms} "
@@ -1179,6 +1210,15 @@ def main() -> int:
         help="Mock GPS longitude for --test-alert (requires --test-lat; or use --test-lat-lng)",
     )
     ap.add_argument(
+        "--test-accident-mode",
+        choices=("auto", "geocode", "polygon", "centroid", "coordinates"),
+        default=None,
+        help=(
+            "With --test-alert: force Accident SMS field resolver (default: auto chain). "
+            "geocode=Nominatim only; polygon=barangay cell; centroid=nearest (approx)"
+        ),
+    )
+    ap.add_argument(
         "--voice-cancel-keyword",
         type=str,
         default="cancel",
@@ -1220,6 +1260,9 @@ def main() -> int:
         test_lon=args.test_lon,
         test_lat_lng=list(test_lat_lng),
     )
+    test_accident_mode = args.test_accident_mode
+    if test_accident_mode is not None and not test_now:
+        ap.error("--test-accident-mode requires --test-alert")
     run(
         dry_run=args.dry_run,
         core_flow_only=args.core_flow_only,
@@ -1230,6 +1273,7 @@ def main() -> int:
         post_alert_cooldown_sec=args.post_alert_cooldown_sec,
         impact_log_cooldown_sec=args.impact_log_cooldown_sec,
         test_location=test_location,
+        test_accident_mode=test_accident_mode,
     )
     return 0
 
