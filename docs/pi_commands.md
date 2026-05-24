@@ -75,9 +75,13 @@ python -m src.main --test-alert --test-lat 14.299 --test-lon 121.060 --disable-s
 
 # Routing / geofence (no hardware; needs shapely + libgeos-dev)
 python -m src.routing_test                      # Quick inside/outside + recipient samples
-python -m src.routing_accident_test --mode all --lat 14.2989841 --lon 121.0597082
-python -m src.routing_accident_test --mode all 14.2989841 121.0597082
-python -m src.routing_accident_test --preset langkiwa   # optional named points
+python -m src.routing_accident_test --mode all --lat 14.2989841 --lon 121.0597082   # SMS preview per mode (not sent)
+python -m src.routing_accident_test --mode geocode --lat 14.2989841 --lon 121.0597082
+python -m src.routing_accident_test --mode polygon --lat 14.2989841 --lon 121.0597082
+python -m src.routing_accident_test --mode centroid --lat 14.2989841 --lon 121.0597082
+python -m src.routing_accident_test --mode coordinates --lat 14.2989841 --lon 121.0597082
+python -m src.routing_accident_test --mode auto --lat 14.2989841 --lon 121.0597082
+python -m src.routing_accident_test --no-sms-preview --mode auto --lat 14.3331 --lon 121.0854
 python -m src.routing_matrix_test               # All 7 barangay centroids + outside + no GPS
 python -m src.routing_matrix_test --sms-preview # Same + print SMS body per scenario
 

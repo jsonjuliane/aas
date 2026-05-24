@@ -1,22 +1,29 @@
 """
 Bench test for SMS ``Accident:`` resolver modes (geocode, polygon, centroid, auto).
 
+Prints resolver output and full collision SMS body per mode (does not send SMS).
+
 Run from project root (needs shapely + config; geocode modes need internet):
 
   python -m src.routing_accident_test --mode all --lat 14.2989841 --lon 121.0597082
-  python -m src.routing_accident_test --mode all 14.2989841 121.0597082
-  python -m src.routing_accident_test --mode geocode --lat 14.3331 --lon 121.0854
-  python -m src.routing_accident_test --preset langkiwa
+  python -m src.routing_accident_test --mode geocode --lat 14.2989841 --lon 121.0597082
+  python -m src.routing_accident_test --mode polygon --lat 14.2989841 --lon 121.0597082
+  python -m src.routing_accident_test --mode centroid --lat 14.2989841 --lon 121.0597082
+  python -m src.routing_accident_test --mode coordinates --lat 14.2989841 --lon 121.0597082
+  python -m src.routing_accident_test --mode auto --lat 14.2989841 --lon 121.0597082
+  python -m src.routing_accident_test --no-sms-preview --mode auto --lat 14.3331 --lon 121.0854
 """
 
 from __future__ import annotations
 
 import argparse
-import sys
+import textwrap
 
+from src import contacts
 from src.routing import (
     area_label,
     classify_location,
+    get_recipients,
     is_inside_binan,
     resolve_accident_barangay,
     resolve_accident_sms_address_mode,
@@ -66,7 +73,53 @@ def _resolve_coordinates(
     return plat, plon, f"Default preset: langkiwa — {note}"
 
 
-def _print_mode_result(lat: float, lon: float, mode: str) -> None:
+def _print_sms_preview(
+    lat: float,
+    lon: float,
+    accident_label: str,
+    *,
+    home_barangay: str,
+    template: str,
+    rider_name: str,
+) -> None:
+    """Print full collision SMS body (same template as production; not sent)."""
+    area = area_label(classify_location(lat, lon))
+    try:
+        route = get_recipients(
+            lat,
+            lon,
+            family_phones=["+639000000000"],
+            home_barangay=home_barangay,
+        )
+        notified = str(route.get("notified", ""))
+    except Exception as e:
+        notified = f"(routing error: {e})"
+    body = contacts.format_alert_message(
+        template=template,
+        lat=lat,
+        lon=lon,
+        rider_name=rider_name,
+        home_barangay=home_barangay,
+        area=area,
+        accident_barangay=accident_label,
+        notified=notified,
+    )
+    print("  --- SMS preview (not sent) ---")
+    for line in body.splitlines():
+        print(f"    {line}")
+    print(f"  ({len(body)} chars)")
+
+
+def _print_mode_result(
+    lat: float,
+    lon: float,
+    mode: str,
+    *,
+    sms_preview: bool,
+    home_barangay: str,
+    template: str,
+    rider_name: str,
+) -> None:
     label, details = resolve_accident_sms_address_mode(lat, lon, mode=mode)  # type: ignore[arg-type]
     print(f"  [{mode:11}] Accident: {label!r}")
     print(
@@ -75,6 +128,16 @@ def _print_mode_result(lat: float, lon: float, mode: str) -> None:
         f"barangay={details.get('barangay')!r} "
         f"method={details.get('barangay_method')}"
     )
+    if sms_preview:
+        _print_sms_preview(
+            lat,
+            lon,
+            label,
+            home_barangay=home_barangay,
+            template=template,
+            rider_name=rider_name,
+        )
+    print()
 
 
 def _print_context(lat: float, lon: float) -> None:
@@ -89,14 +152,38 @@ def _print_context(lat: float, lon: float) -> None:
 
 
 def main() -> int:
+    mode_help = textwrap.dedent(
+        """
+        Modes (single resolver or compare all):
+          geocode     — Nominatim street/area only (internet)
+          polygon     — barangay_boundaries.binan.json cell name only
+          centroid    — nearest of 24 centroids: Near {name} (approx)
+          coordinates — lat, lon string only (same style as GPS: line)
+          auto        — production chain: geocode → polygon → centroid → coordinates
+          all         — run every mode above at the same lat/lon
+        """
+    ).strip()
     ap = argparse.ArgumentParser(
-        description="Test Accident SMS address: geocode, polygon, nearest centroid, auto chain."
+        description="Test Accident SMS address resolvers; prints full SMS preview (not sent).",
+        epilog=mode_help,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     ap.add_argument(
         "--mode",
         choices=[*MODES, "all"],
         default="all",
-        help="Resolver to exercise (default: all modes for comparison)",
+        help="Resolver to exercise (default: all). See epilog for mode list.",
+    )
+    ap.add_argument(
+        "--sms-preview",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Print full collision SMS body per mode (default: on; does not send)",
+    )
+    ap.add_argument(
+        "--home-barangay",
+        default="Zapote",
+        help="Home barangay in SMS template (default: Zapote)",
     )
     ap.add_argument("--preset", choices=sorted(PRESETS.keys()), help="Named test coordinates")
     ap.add_argument("--lat", type=float, metavar="LAT", help="Latitude (WGS84); requires --lon")
@@ -120,26 +207,36 @@ def main() -> int:
     if note:
         print(f"{note}\n")
 
+    try:
+        _phones, template, rider_name, _cfg_home = contacts.load_family_contacts()
+    except Exception as e:
+        print(f"contacts load failed: {e}")
+        return 1
+    home_barangay = str(args.home_barangay)
+    sms_preview = bool(args.sms_preview)
+
     _print_context(lat, lon)
+    if sms_preview:
+        print("SMS preview uses contacts.family.json template (not sent via GSM).\n")
+
+    preview_kw = {
+        "sms_preview": sms_preview,
+        "home_barangay": home_barangay,
+        "template": template,
+        "rider_name": rider_name,
+    }
 
     if args.mode == "all":
-        print("Modes (production auto uses first success: geocode → polygon → centroid → coordinates):")
+        print("Modes (production auto: geocode → polygon → centroid → coordinates):")
         for mode in MODES:
-            _print_mode_result(lat, lon, mode)
-        print()
+            _print_mode_result(lat, lon, mode, **preview_kw)
         auto_label, auto_details = resolve_accident_sms_address_mode(lat, lon, mode="auto")
-        print(f"→ SMS would use (auto): {auto_label!r}  [source={auto_details.get('source')}]")
+        print(f"→ Production (auto) picks: {auto_label!r}  [source={auto_details.get('source')}]")
     else:
         print(f"Single mode: {args.mode}")
-        _print_mode_result(lat, lon, args.mode)
+        _print_mode_result(lat, lon, args.mode, **preview_kw)
 
-    print(
-        "\nNotes:"
-        "\n  geocode   — needs internet (Nominatim)"
-        "\n  polygon   — barangay_boundaries.binan.json only; N/A if outside cell"
-        "\n  centroid  — nearest of 24 centroids; label includes (approx)"
-        "\n  auto      — same chain as collision SMS"
-    )
+    print("\nDoes not send SMS. To send a real test: python -m src.gsm_test --send-alert-sms +63...")
     return 0
 
 
