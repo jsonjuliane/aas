@@ -11,6 +11,8 @@ import json
 from functools import lru_cache
 from typing import Literal
 
+AccidentSmsTestMode = Literal["auto", "geocode", "polygon", "centroid", "coordinates"]
+
 from src import contacts
 import math
 
@@ -181,6 +183,17 @@ def _resolve_accident_barangay_centroid(lat: float, lon: float) -> str | None:
     return best_name
 
 
+def _resolve_barangay_polygon_only(lat: float, lon: float) -> str | None:
+    """Barangay name from point-in-polygon only (no centroid fallback)."""
+    from shapely.geometry import Point
+
+    pt = Point(float(lon), float(lat))
+    for name, poly in _load_barangay_polygons():
+        if poly.contains(pt):
+            return name
+    return None
+
+
 def resolve_accident_barangay(lat: float, lon: float) -> tuple[str | None, str]:
     """
     Resolve accident barangay name from GPS when inside Biñan.
@@ -193,12 +206,9 @@ def resolve_accident_barangay(lat: float, lon: float) -> tuple[str | None, str]:
     """
     if not is_inside_binan(lat, lon):
         return None, "none"
-    from shapely.geometry import Point
-
-    pt = Point(float(lon), float(lat))
-    for name, poly in _load_barangay_polygons():
-        if poly.contains(pt):
-            return name, "polygon"
+    brgy = _resolve_barangay_polygon_only(lat, lon)
+    if brgy:
+        return brgy, "polygon"
     brgy = _resolve_accident_barangay_centroid(lat, lon)
     if brgy:
         return brgy, "centroid"
@@ -225,6 +235,17 @@ def _coord_fallback_label(lat: float, lon: float) -> str:
     return f"{float(lat):.{prec}f}, {float(lon):.{prec}f}"
 
 
+def _barangay_sms_fallback_label(barangay_name: str, method: str) -> str:
+    """Human-readable barangay label for SMS when geocode is unavailable."""
+    from src.contacts import sms_safe_for_gsm7
+
+    if method == "centroid":
+        text = f"Near {barangay_name} (approx)"
+    else:
+        text = barangay_name
+    return sms_safe_for_gsm7(text)
+
+
 def _truncate_sms_label(text: str, max_len: int) -> str:
     from src.contacts import sms_safe_for_gsm7
 
@@ -237,46 +258,116 @@ def _truncate_sms_label(text: str, max_len: int) -> str:
     return label[: max(0, limit - 3)].rstrip() + "..."
 
 
+def resolve_accident_sms_address_mode(
+    lat: float | None,
+    lon: float | None,
+    *,
+    mode: AccidentSmsTestMode = "auto",
+) -> tuple[str, dict[str, object]]:
+    """
+    Build SMS ``Accident:`` text for one resolver mode (bench / ``routing_accident_test``).
+
+    Modes:
+        auto — production fallback chain (same as :func:`resolve_accident_sms_address`)
+        geocode — Nominatim street/area only
+        polygon — barangay polygon name only (inside Biñan)
+        centroid — nearest centroid only, ``Near {name} (approx)``
+        coordinates — ``lat, lon`` string only
+    """
+    details: dict[str, object] = {
+        "address": None,
+        "barangay": None,
+        "barangay_method": "none",
+        "source": "none",
+        "mode": mode,
+    }
+    if lat is None or lon is None:
+        return "N/A", details
+
+    flat, flon = float(lat), float(lon)
+
+    if mode == "coordinates":
+        details["source"] = "coordinates"
+        return (
+            _truncate_sms_label(_coord_fallback_label(flat, flon), SMS_ACCIDENT_ADDRESS_MAX_CHARS),
+            details,
+        )
+
+    if mode == "geocode":
+        address = _reverse_geocode_street_address(flat, flon)
+        details["address"] = address
+        if address:
+            details["source"] = "geocode"
+            return _truncate_sms_label(address, SMS_ACCIDENT_ADDRESS_MAX_CHARS), details
+        return "N/A", details
+
+    if mode in ("polygon", "centroid"):
+        if not is_inside_binan(flat, flon):
+            details["source"] = "outside_binan"
+            return "N/A", details
+        if mode == "polygon":
+            brgy = _resolve_barangay_polygon_only(flat, flon)
+            method = "polygon"
+        else:
+            brgy = _resolve_accident_barangay_centroid(flat, flon)
+            method = "centroid"
+        details["barangay"] = brgy
+        details["barangay_method"] = method
+        if brgy:
+            details["source"] = f"barangay_{method}"
+            label = _barangay_sms_fallback_label(brgy, method)
+            return _truncate_sms_label(label, SMS_ACCIDENT_ADDRESS_MAX_CHARS), details
+        return "N/A", details
+
+    return resolve_accident_sms_address(lat, lon)
+
+
 def resolve_accident_sms_address(
     lat: float | None,
     lon: float | None,
 ) -> tuple[str, dict[str, object]]:
     """
-    Build SMS ``Accident:`` from reverse geocode at (lat, lon).
+    Build SMS ``Accident:`` from (lat, lon) with layered fallbacks.
 
-    Barangay polygons/centroids are used only for rescuer routing, not this field.
-    When geocode fails but coordinates exist, falls back to the same coordinate string
-    as the ``GPS:`` line so the SMS never shows ``N/A`` with a valid fix.
+    Order: reverse geocode street → barangay polygon → nearest centroid (approx)
+    → coordinate string (same as ``GPS:``) → ``N/A`` only when GPS is missing.
 
     Returns:
-        (label, details) with keys address, source (geocode, coordinates, or none).
+        (label, details) with keys address, barangay, barangay_method, source.
     """
-    details: dict[str, object] = {"address": None, "source": "none"}
+    details: dict[str, object] = {
+        "address": None,
+        "barangay": None,
+        "barangay_method": "none",
+        "source": "none",
+    }
     if lat is None or lon is None:
         return "N/A", details
 
-    address = _reverse_geocode_street_address(float(lat), float(lon))
+    flat, flon = float(lat), float(lon)
+    address = _reverse_geocode_street_address(flat, flon)
     details["address"] = address
     if address:
         details["source"] = "geocode"
         return _truncate_sms_label(address, SMS_ACCIDENT_ADDRESS_MAX_CHARS), details
 
-    coord_label = _coord_fallback_label(float(lat), float(lon))
+    if is_inside_binan(flat, flon):
+        brgy, method = resolve_accident_barangay(flat, flon)
+        details["barangay"] = brgy
+        details["barangay_method"] = method
+        if brgy:
+            details["source"] = f"barangay_{method}"
+            label = _barangay_sms_fallback_label(brgy, method)
+            return _truncate_sms_label(label, SMS_ACCIDENT_ADDRESS_MAX_CHARS), details
+
     details["source"] = "coordinates"
+    coord_label = _coord_fallback_label(flat, flon)
     return _truncate_sms_label(coord_label, SMS_ACCIDENT_ADDRESS_MAX_CHARS), details
 
 
 def format_accident_sms_label(lat: float | None, lon: float | None) -> tuple[str, dict[str, object]]:
-    """Alias for :func:`resolve_accident_sms_address` (geocode-only Accident line)."""
-    label, details = resolve_accident_sms_address(lat, lon)
-    if lat is not None and lon is not None and is_inside_binan(float(lat), float(lon)):
-        brgy, method = resolve_accident_barangay(float(lat), float(lon))
-        details["barangay"] = brgy
-        details["barangay_method"] = method
-    else:
-        details["barangay"] = None
-        details["barangay_method"] = "none"
-    return label, details
+    """Alias for :func:`resolve_accident_sms_address` (``mode=auto``)."""
+    return resolve_accident_sms_address(lat, lon)
 
 
 def _build_notified_summary(

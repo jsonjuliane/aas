@@ -1,13 +1,30 @@
 {
-  "version": 1,
+  "version": 2,
   "barangays": [
-    { "name": "Zapote", "rescuer_phone": "+639217679405" },
-    { "name": "Timbao", "rescuer_phone": "+639217679405" },
-    { "name": "Mamplasan", "rescuer_phone": "+639217679405" },
+    { "name": "Biñan", "rescuer_phone": "+639217679405" },
+    { "name": "Bungahan", "rescuer_phone": "+639217679405" },
+    { "name": "Canlalay", "rescuer_phone": "+639217679405" },
+    { "name": "Casile", "rescuer_phone": "+639217679405" },
     { "name": "Delapaz", "rescuer_phone": "+639217679405" },
+    { "name": "Ganado", "rescuer_phone": "+639217679405" },
+    { "name": "San Francisco", "rescuer_phone": "+639217679405" },
     { "name": "Langkiwa", "rescuer_phone": "+639217679405" },
     { "name": "Loma", "rescuer_phone": "+639217679405" },
-    { "name": "Sto. Domingo", "rescuer_phone": "+639217679405" }
+    { "name": "Malaban", "rescuer_phone": "+639217679405" },
+    { "name": "Malamig", "rescuer_phone": "+639217679405" },
+    { "name": "Mamplasan", "rescuer_phone": "+639217679405" },
+    { "name": "Platero", "rescuer_phone": "+639217679405" },
+    { "name": "Poblacion", "rescuer_phone": "+639217679405" },
+    { "name": "Sto. Nino", "rescuer_phone": "+639217679405" },
+    { "name": "San Antonio", "rescuer_phone": "+639217679405" },
+    { "name": "San Jose", "rescuer_phone": "+639217679405" },
+    { "name": "San Vicente", "rescuer_phone": "+639217679405" },
+    { "name": "Soro-Soro", "rescuer_phone": "+639217679405" },
+    { "name": "Sto. Domingo", "rescuer_phone": "+639217679405" },
+    { "name": "Sto. Tomas", "rescuer_phone": "+639217679405" },
+    { "name": "Timbao", "rescuer_phone": "+639217679405" },
+    { "name": "Tubigan", "rescuer_phone": "+639217679405" },
+    { "name": "Zapote", "rescuer_phone": "+639217679405" }
   ],
   "default_rescuer_phone": "+639217679405"
 }

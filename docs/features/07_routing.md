@@ -31,10 +31,11 @@ Use `shapely` to test point-in-polygon. Boundary coordinates in `geofence.binan.
 
 ## Accident location in SMS (``Accident:`` field)
 
-`resolve_accident_sms_address()` builds the ``Accident:`` line from Nominatim only (with retries).
-If geocode fails but coordinates exist, it uses the same `lat, lon` string as the ``GPS:`` line.
+`resolve_accident_sms_address()` fallback order: **geocode** → **barangay polygon** → **nearest centroid** (`Near … (approx)`) → **coordinates** → `N/A` (no GPS only).
 
-Barangay name from polygons/centroids is for **rescuer routing** only, not mixed into ``Accident:``.
+Configs list all **24** Biñan barangays. Regenerate polygons: `python scripts/generate_barangay_boundaries.py`.
+
+Bench each resolver mode: `python -m src.routing_accident_test --mode all --preset langkiwa`
 
 ## Accident barangay (routing, inside Biñan)
 

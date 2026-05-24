@@ -75,6 +75,8 @@ python -m src.main --test-alert --test-lat 14.299 --test-lon 121.060 --disable-s
 
 # Routing / geofence (no hardware; needs shapely + libgeos-dev)
 python -m src.routing_test                      # Quick inside/outside + recipient samples
+python -m src.routing_accident_test             # Accident: geocode vs polygon vs centroid vs auto
+python -m src.routing_accident_test --mode all --preset langkiwa
 python -m src.routing_matrix_test               # All 7 barangay centroids + outside + no GPS
 python -m src.routing_matrix_test --sms-preview # Same + print SMS body per scenario
 

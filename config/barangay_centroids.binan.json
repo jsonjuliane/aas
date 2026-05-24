@@ -1,14 +1,31 @@
 {
-  "_comment": "Reference points for accident barangay (nearest centroid when GPS is inside Biñan). Coordinates from OSM/Nominatim.",
-  "version": 1,
+  "_comment": "Reference points for accident barangay (polygon + nearest-centroid fallback). 24 barangays of Biñan City; coords from OSM/Nominatim.",
+  "version": 2,
   "method": "nearest_centroid",
   "barangays": [
-    { "name": "Zapote", "lat": 14.3127472, "lon": 121.080435 },
-    { "name": "Timbao", "lat": 14.2811846, "lon": 121.0553516 },
-    { "name": "Mamplasan", "lat": 14.2934823, "lon": 121.0802954 },
+    { "name": "Biñan", "lat": 14.2620732, "lon": 121.0528263 },
+    { "name": "Bungahan", "lat": 14.304876, "lon": 121.0745263 },
+    { "name": "Canlalay", "lat": 14.3378169, "lon": 121.0718176 },
+    { "name": "Casile", "lat": 14.3432917, "lon": 121.0881098 },
     { "name": "Delapaz", "lat": 14.3489723, "lon": 121.0849198 },
+    { "name": "Ganado", "lat": 14.2831304, "lon": 121.0810784 },
+    { "name": "San Francisco", "lat": 14.3327287, "lon": 121.0559349 },
     { "name": "Langkiwa", "lat": 14.2989841, "lon": 121.0597082 },
     { "name": "Loma", "lat": 14.2813004, "lon": 121.0644428 },
-    { "name": "Sto. Domingo", "lat": 14.3358669, "lon": 121.0825576 }
+    { "name": "Malaban", "lat": 14.3464239, "lon": 121.0889291 },
+    { "name": "Malamig", "lat": 14.2782112, "lon": 121.0536185 },
+    { "name": "Mamplasan", "lat": 14.2934823, "lon": 121.0802954 },
+    { "name": "Platero", "lat": 14.3242551, "lon": 121.0947923 },
+    { "name": "Poblacion", "lat": 14.3387065, "lon": 121.0847392 },
+    { "name": "Sto. Nino", "lat": 14.3303715, "lon": 121.0864846 },
+    { "name": "San Antonio", "lat": 14.327945, "lon": 121.0912883 },
+    { "name": "San Jose", "lat": 14.3440907, "lon": 121.0823836 },
+    { "name": "San Vicente", "lat": 14.3320735, "lon": 121.0810377 },
+    { "name": "Soro-Soro", "lat": 14.3294091, "lon": 121.0655163 },
+    { "name": "Sto. Domingo", "lat": 14.3358669, "lon": 121.0825576 },
+    { "name": "Sto. Tomas", "lat": 14.3169068, "lon": 121.0707757 },
+    { "name": "Timbao", "lat": 14.2811846, "lon": 121.0553516 },
+    { "name": "Tubigan", "lat": 14.3293175, "lon": 121.074403 },
+    { "name": "Zapote", "lat": 14.3127472, "lon": 121.080435 }
   ]
 }

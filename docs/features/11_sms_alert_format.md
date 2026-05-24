@@ -22,10 +22,15 @@ GPS: {map_url}
 
 ## ``Accident:`` field (address)
 
-Always from **reverse geocode** at the same `(lat, lon)` as ``GPS:`` (Nominatim, with retries).
-If geocode fails but GPS exists, ``Accident:`` falls back to the same coordinate string as ``GPS:`` (not ``N/A``).
+Same `(lat, lon)` as ``GPS:``. Fallback order:
 
-Barangay polygons/centroids are used only to pick **rescuer phones**, not the ``Accident:`` text.
+1. **Street/area** — Nominatim reverse geocode (with retries)
+2. **Barangay polygon** — name from `barangay_boundaries.binan.json` (inside Biñan)
+3. **Nearest barangay** — `Near {name} (approx)` from `barangay_centroids.binan.json`
+4. **Coordinates** — same numbers as ``GPS:`` (outside Biñan or no barangay match)
+5. **`N/A`** — only when there is no GPS fix
+
+All **24** Biñan barangays are in the centroid/boundary configs; rescuer phones in `contacts.barangay.json`.
 
 ## Who receives the same text
 
