@@ -1,20 +1,19 @@
 {
-  "_comment": "TESTING: all family phones set to 09568504890. Revert before production deploy.",
   "version": 1,
   "contacts": [
     {
-      "name": "Primary contact",
-      "phone": "09568504890",
+      "name": "JM",
+      "phone": "+639202828660",
       "priority": 1
     },
     {
-      "name": "JM",
-      "phone": "09568504890",
+      "name": "Juls",
+      "phone": "+639278222260",
       "priority": 2
     },
     {
-      "name": "Juls",
-      "phone": "09568504890",
+      "name": "Jom",
+      "phone": "+639922547260",
       "priority": 3
     }
   ],
