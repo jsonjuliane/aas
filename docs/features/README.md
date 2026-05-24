@@ -17,6 +17,7 @@ Each document describes one feature: hardware and interface.
 
 See also:
 
+- `docs/system_flow.md` — **end-to-end current flow** and what changed vs older docs
 - `docs/pi_commands.md` — copy-paste Pi terminal commands (venv, I2C, serial, run modes)
 - `docs/hardware.md` — prototype BOM and pin table
 - `docs/phase0_module_boundaries.md` — API contracts

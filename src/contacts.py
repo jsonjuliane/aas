@@ -165,7 +165,7 @@ def format_message(
 
     Args:
         template: Template with optional placeholders (see module default).
-        accident_barangay: SMS Accident line (e.g. ``Langkiwa - Main St`` or barangay only).
+        accident_barangay: SMS Accident line (reverse-geocoded street/area, or coordinates).
         notified: Summary of recipient groups from routing.
         sms_plain_coords: If True, {map_url} is "lat, lon" only (Globe often blocks https URLs).
     """
@@ -181,6 +181,11 @@ def format_message(
         map_url = "N/A"
     if accident_barangay:
         accident_label = accident_barangay
+    elif lat is not None and lon is not None:
+        from src.config import SMS_ACCIDENT_COORD_PRECISION
+
+        prec = max(0, min(8, int(SMS_ACCIDENT_COORD_PRECISION)))
+        accident_label = f"{lat:.{prec}f}, {lon:.{prec}f}"
     elif area.startswith("Inside"):
         accident_label = "Unknown"
     else:

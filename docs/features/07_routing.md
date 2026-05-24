@@ -31,16 +31,10 @@ Use `shapely` to test point-in-polygon. Boundary coordinates in `geofence.binan.
 
 ## Accident location in SMS (``Accident:`` field)
 
-`format_accident_sms_label()` builds the ``Accident:`` line:
+`resolve_accident_sms_address()` builds the ``Accident:`` line from Nominatim only (with retries).
+If geocode fails but coordinates exist, it uses the same `lat, lon` string as the ``GPS:`` line.
 
-| Pieces available | SMS example |
-|------------------|-------------|
-| Barangay + street (geocode) | `Langkiwa - National Highway, Zapote` |
-| Barangay only | `Langkiwa` |
-| Street only (outside Biñan) | `Quezon Avenue, Manila` |
-| Neither | `N/A` |
-
-Street text uses Nominatim when `REVERSE_GEOCODE_ENABLED` is True (internet at alert time).
+Barangay name from polygons/centroids is for **rescuer routing** only, not mixed into ``Accident:``.
 
 ## Accident barangay (routing, inside Biñan)
 

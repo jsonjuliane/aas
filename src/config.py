@@ -70,7 +70,7 @@ BUZZER_MONITOR_READY_GAP_SEC = 0.10
 ACCEL_THRESHOLD_G = 1.2  # Minimum g-force to flag potential accident
 ACCEL_THRESHOLD_G_MAX = 10.0  # Upper bound for validation (wide so taps >5g still count)
 TILT_DELTA_THRESHOLD_G = 0.5  # Baseline delta required to validate true collision
-ACTION_COOLDOWN_SEC = 8.0  # Debounce action flow after a true collision
+POST_ALERT_COOLDOWN_SEC = 30.0  # No new alert until this long after last alert cycle finished
 IMPACT_LOG_COOLDOWN_SEC = 0.75  # Debounce impact candidate logs in main loop
 COUNTDOWN_SECONDS = 10
 # Countdown cues: buzzer beeps (default). Set True only if DFPlayer MP3 module is wired and working.
@@ -79,8 +79,10 @@ COUNTDOWN_USE_MP3 = False
 # Accident SMS ``Accident:`` field — reverse geocode lat/lon to street address (Nominatim; needs internet).
 REVERSE_GEOCODE_ENABLED = True
 REVERSE_GEOCODE_TIMEOUT_SEC = 5.0
-SMS_ACCIDENT_ADDRESS_MAX_CHARS = 40  # street fragment in combined Accident line
-SMS_ACCIDENT_COMBINED_MAX_CHARS = 56  # "Barangay - address" in single-part SMS
+REVERSE_GEOCODE_RETRY_COUNT = 2  # Extra Nominatim attempts when the first fails (network flake)
+REVERSE_GEOCODE_RETRY_DELAY_SEC = 1.0  # Pause between geocode retries
+SMS_ACCIDENT_ADDRESS_MAX_CHARS = 56  # max length for Accident: line (geocode street/area)
+SMS_ACCIDENT_COORD_PRECISION = 4  # fallback Accident text and GPS line (must match)
 
 # Voice / mic cancel during countdown
 # Primary fallback: GPIO button (CANCEL_BUTTON_GPIO). Keyword cancel needs Pi internet (Google STT).

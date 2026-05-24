@@ -30,7 +30,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.config import (
-    ACTION_COOLDOWN_SEC,
+    POST_ALERT_COOLDOWN_SEC,
     BUZZER_COUNTDOWN_ENABLED,
     COUNTDOWN_SECONDS,
     COUNTDOWN_USE_MP3,
@@ -289,7 +289,7 @@ def run(
     voice_cancel_keyword: str = "cancel",
     voice_device_index: int | None = None,
     poll_interval_sec: float = 0.05,
-    action_cooldown_sec: float = ACTION_COOLDOWN_SEC,
+    post_alert_cooldown_sec: float = POST_ALERT_COOLDOWN_SEC,
     impact_log_cooldown_sec: float = IMPACT_LOG_COOLDOWN_SEC,
     test_location: tuple[float, float] | None = None,
 ) -> None:
@@ -326,7 +326,7 @@ def run(
         _signal_monitoring_active(dry_run=dry_run, resumed=False)
 
         test_alert_done = False
-        last_action_at = -1e9
+        last_alert_cycle_end_at = -1e9
         last_impact_log_at = -1e9
         while True:
             if test_alert_immediately and not test_alert_done:
@@ -335,15 +335,18 @@ def run(
                 if core_flow_only:
                     print("[core-flow] Test trigger reached. Action audio is skipped in this mode.")
                 else:
-                    _handle_alert(
-                        sensor=sensor,
-                        audio_mod=audio_mod,
-                        dry_run=dry_run,
-                        disable_sms_send=disable_sms_send,
-                        voice_cancel_keyword=voice_cancel_keyword,
-                        voice_device_index=voice_device_index,
-                        test_location=test_location,
-                    )
+                    try:
+                        _handle_alert(
+                            sensor=sensor,
+                            audio_mod=audio_mod,
+                            dry_run=dry_run,
+                            disable_sms_send=disable_sms_send,
+                            voice_cancel_keyword=voice_cancel_keyword,
+                            voice_device_index=voice_device_index,
+                            test_location=test_location,
+                        )
+                    finally:
+                        last_alert_cycle_end_at = time.monotonic()
                     if not core_flow_only:
                         _signal_monitoring_active(dry_run=dry_run, resumed=True)
                 continue
@@ -378,14 +381,17 @@ def run(
                     last_impact_log_at = now
 
             actual_collision = bool(eval_data["actual_collision"])
-            in_action_cooldown = (now - last_action_at) < max(0.0, action_cooldown_sec)
-            action_collision = actual_collision and (not in_action_cooldown) and (not core_flow_only)
+            in_post_alert_cooldown = (now - last_alert_cycle_end_at) < max(
+                0.0, post_alert_cooldown_sec
+            )
+            action_collision = (
+                actual_collision and (not in_post_alert_cooldown) and (not core_flow_only)
+            )
 
-            if actual_collision and in_action_cooldown:
+            if actual_collision and in_post_alert_cooldown:
                 continue
 
             if actual_collision:
-                last_action_at = now
                 if core_flow_only:
                     print("Impact was validated. Core-flow mode keeps this as monitoring-only.")
                     logging_store.log_event(
@@ -428,15 +434,18 @@ def run(
                             "gyro_dps": eval_data["gyro_dps"],
                         }
                     )
-                    _handle_alert(
-                        sensor=sensor,
-                        audio_mod=audio_mod,
-                        dry_run=dry_run,
-                        disable_sms_send=disable_sms_send,
-                        voice_cancel_keyword=voice_cancel_keyword,
-                        voice_device_index=voice_device_index,
-                        test_location=test_location,
-                    )
+                    try:
+                        _handle_alert(
+                            sensor=sensor,
+                            audio_mod=audio_mod,
+                            dry_run=dry_run,
+                            disable_sms_send=disable_sms_send,
+                            voice_cancel_keyword=voice_cancel_keyword,
+                            voice_device_index=voice_device_index,
+                            test_location=test_location,
+                        )
+                    finally:
+                        last_alert_cycle_end_at = time.monotonic()
                     _signal_monitoring_active(dry_run=dry_run, resumed=True)
             time.sleep(poll_interval_sec)
     except KeyboardInterrupt:
@@ -884,9 +893,18 @@ def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool
     lat = float(location["lat"]) if location and location.get("lat") is not None else None
     lon = float(location["lon"]) if location and location.get("lon") is not None else None
 
-    try:
-        from src import routing
+    from src import routing
 
+    accident_sms, accident_details = routing.resolve_accident_sms_address(lat, lon)
+    area = "Unknown (no GPS)"
+    if lat is not None and lon is not None:
+        try:
+            area = routing.area_label(routing.classify_location(lat, lon))
+        except Exception as e:
+            area = "Unknown (routing error)"
+            print(f"Area classify error: {e}")
+
+    try:
         route = routing.get_recipients(
             lat,
             lon,
@@ -897,16 +915,18 @@ def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool
     except Exception as e:
         route = {
             "location_class": "unknown",
-            "area_label": "Unknown (routing error)",
+            "area_label": area,
             "inside_binan": None,
             "lat": lat,
             "lon": lon,
             "phones": phones,
+            "accident_location": accident_sms,
+            "accident_location_details": accident_details,
             "error": str(e),
         }
         print(f"Routing error: {e}")
 
-    area = str(route.get("area_label", "Unknown (no GPS)"))
+    area = str(route.get("area_label", area))
     home_rescuer = route.get("home_rescuer_phone")
     print(
         f"Routing: {area} (class={route.get('location_class')}, lat={lat}, lon={lon}, "
@@ -920,17 +940,16 @@ def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool
         }
     )
 
-    accident_sms = route.get("accident_location") or route.get("accident_barangay")
-    if accident_sms in (None, "", "N/A"):
-        accident_sms = None
-    if accident_sms:
-        loc_detail = route.get("accident_location_details") or {}
-        brgy_method = route.get("accident_barangay_method", "none")
-        print(
-            f"Accident SMS label: {accident_sms} "
-            f"(barangay={loc_detail.get('barangay')}, method={brgy_method}, "
-            f"address={loc_detail.get('address')})"
-        )
+    accident_sms = route.get("accident_location") or accident_sms
+    if accident_sms in (None, ""):
+        accident_sms = routing.resolve_accident_sms_address(lat, lon)[0]
+    loc_detail = route.get("accident_location_details") or accident_details
+    print(
+        f"Accident SMS label: {accident_sms} "
+        f"(source={loc_detail.get('source')}, address={loc_detail.get('address')}, "
+        f"routing_barangay={route.get('accident_barangay')}, "
+        f"method={route.get('accident_barangay_method', 'none')})"
+    )
 
     message = contacts.format_alert_message(
         template=template,
@@ -1137,10 +1156,13 @@ def main() -> int:
         help=argparse.SUPPRESS,
     )
     ap.add_argument(
-        "--action-cooldown-sec",
+        "--post-alert-cooldown-sec",
         type=float,
-        default=ACTION_COOLDOWN_SEC,
-        help="Debounce true-collision action trigger (default from config)",
+        default=POST_ALERT_COOLDOWN_SEC,
+        help=(
+            "Seconds after an alert cycle finishes (countdown/SMS done) before "
+            "another collision can trigger (default from config)"
+        ),
     )
     ap.add_argument(
         "--impact-log-cooldown-sec",
@@ -1164,7 +1186,7 @@ def main() -> int:
         disable_sms_send=bool(args.disable_sms_send),
         voice_cancel_keyword=str(args.voice_cancel_keyword),
         voice_device_index=args.voice_device_index,
-        action_cooldown_sec=args.action_cooldown_sec,
+        post_alert_cooldown_sec=args.post_alert_cooldown_sec,
         impact_log_cooldown_sec=args.impact_log_cooldown_sec,
         test_location=test_location,
     )

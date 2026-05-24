@@ -45,7 +45,7 @@ Main loop logging behavior (`src/main.py`):
 - Flags recorded per sample: `impact_window_hit`, `tilt_hit`, `actual_collision`, `action_collision`
 - Debounce controls:
   - `--impact-log-cooldown-sec` (default from `IMPACT_LOG_COOLDOWN_SEC`)
-  - `--action-cooldown-sec` (default from `ACTION_COOLDOWN_SEC`)
+  - `--post-alert-cooldown-sec` (default from `POST_ALERT_COOLDOWN_SEC`) — starts when the alert cycle finishes, not at first impact
 
 ## Isolated collision/tap debug test
 

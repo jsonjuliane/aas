@@ -11,7 +11,7 @@ import math
 from typing import Any
 
 from src.config import (
-    ACTION_COOLDOWN_SEC,
+    POST_ALERT_COOLDOWN_SEC,
     ACCEL_THRESHOLD_G,
     ACCEL_THRESHOLD_G_MAX,
     MPU6050_I2C_ADDR,
@@ -153,7 +153,7 @@ class SensorMPU6050:
                 "impact_window_hit": bool,   # ACCEL_THRESHOLD_G..ACCEL_THRESHOLD_G_MAX
                 "tilt_hit": bool,            # tilt_delta_g > TILT_DELTA_THRESHOLD_G
                 "actual_collision": bool,    # impact_window_hit and tilt_hit
-                "action_cooldown_sec": float,
+                "post_alert_cooldown_sec": float,
                 "thresholds": {...},
                 "accel_g": {"ax","ay","az"},
                 "gyro_dps": {"gx","gy","gz"},
@@ -166,7 +166,7 @@ class SensorMPU6050:
                 "impact_window_hit": False,
                 "tilt_hit": False,
                 "actual_collision": False,
-                "action_cooldown_sec": ACTION_COOLDOWN_SEC,
+                "post_alert_cooldown_sec": POST_ALERT_COOLDOWN_SEC,
                 "thresholds": {
                     "impact_min_g": ACCEL_THRESHOLD_G,
                     "impact_max_g": ACCEL_THRESHOLD_G_MAX,
@@ -200,7 +200,7 @@ class SensorMPU6050:
             "impact_window_hit": impact_window_hit,
             "tilt_hit": tilt_hit,
             "actual_collision": actual_collision,
-            "action_cooldown_sec": ACTION_COOLDOWN_SEC,
+            "post_alert_cooldown_sec": POST_ALERT_COOLDOWN_SEC,
             "thresholds": {
                 "impact_min_g": ACCEL_THRESHOLD_G,
                 "impact_max_g": ACCEL_THRESHOLD_G_MAX,

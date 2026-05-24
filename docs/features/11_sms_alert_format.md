@@ -20,6 +20,13 @@ GPS: {map_url}
 
 `{map_url}` is filled as plain coordinates, e.g. `14.3331, 121.0854`.
 
+## ``Accident:`` field (address)
+
+Always from **reverse geocode** at the same `(lat, lon)` as ``GPS:`` (Nominatim, with retries).
+If geocode fails but GPS exists, ``Accident:`` falls back to the same coordinate string as ``GPS:`` (not ``N/A``).
+
+Barangay polygons/centroids are used only to pick **rescuer phones**, not the ``Accident:`` text.
+
 ## Who receives the same text
 
 **Family** and **barangay rescuers** get the **identical SMS body**. Routing only changes **which phone numbers** are called, not the message wording.

@@ -12,7 +12,14 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from src.config import SMS_ACCIDENT_ADDRESS_MAX_CHARS
+import time
+
+from src.config import (
+    REVERSE_GEOCODE_RETRY_COUNT,
+    REVERSE_GEOCODE_RETRY_DELAY_SEC,
+    REVERSE_GEOCODE_TIMEOUT_SEC,
+    SMS_ACCIDENT_ADDRESS_MAX_CHARS,
+)
 from src.contacts import sms_safe_for_gsm7
 
 _NOMINATIM_REVERSE = "https://nominatim.openstreetmap.org/reverse"
@@ -93,3 +100,35 @@ def reverse_geocode_short_address(
     if len(label) > limit:
         label = label[: max(0, limit - 3)].rstrip() + "..."
     return label
+
+
+def reverse_geocode_short_address_with_retries(
+    lat: float,
+    lon: float,
+    *,
+    timeout_sec: float | None = None,
+    max_len: int | None = None,
+    retry_count: int | None = None,
+    retry_delay_sec: float | None = None,
+) -> str | None:
+    """
+    Call :func:`reverse_geocode_short_address` with bounded retries on failure.
+
+    Respects Nominatim etiquette (low volume; identify via User-Agent).
+    """
+    attempts = max(1, int(retry_count if retry_count is not None else REVERSE_GEOCODE_RETRY_COUNT))
+    delay = max(0.0, float(retry_delay_sec if retry_delay_sec is not None else REVERSE_GEOCODE_RETRY_DELAY_SEC))
+    per_try_timeout = float(timeout_sec if timeout_sec is not None else REVERSE_GEOCODE_TIMEOUT_SEC)
+    last: str | None = None
+    for idx in range(attempts):
+        last = reverse_geocode_short_address(
+            float(lat),
+            float(lon),
+            timeout_sec=per_try_timeout,
+            max_len=max_len,
+        )
+        if last:
+            return last
+        if idx < attempts - 1 and delay > 0:
+            time.sleep(delay)
+    return last

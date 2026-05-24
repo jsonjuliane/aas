@@ -64,7 +64,7 @@ Expected: continuous monitoring; 3–5g candidates are logged with flags; valida
 - `--test-alert`: trigger impact action path immediately (countdown + SMS then exit). `--trigger` is a hidden alias.  
 - `--core-flow-only`: init + monitor sensor only; skips alert action path.  
 - `--disable-sms-send`: run full alert path but skip actual SMS send (bench testing).  
-- `--action-cooldown-sec`: debounce consecutive true-collision actions (default from config).  
+- `--post-alert-cooldown-sec`: block new alerts for N seconds after the last alert cycle finished (default `POST_ALERT_COOLDOWN_SEC`, 30s).  
 - `--impact-log-cooldown-sec`: debounce repeated 3–5g impact-window logs (default from config).  
 - `python -m src.hardware_check`: full probe; **exit 1** if any `[FAIL]` line.  
 - `python -m src.gsm_test`: GSM diagnostics (baud sweep, SIM, signal); optional `--send-sms PHONE "msg"`.  

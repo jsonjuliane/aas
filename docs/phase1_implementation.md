@@ -43,7 +43,7 @@ This document describes the Phase 1 codebase and how to run it.
 
 Legacy `--trigger` is accepted as an alias for `--test-alert`.
 
-`src.main` also supports debounce tuning: `--action-cooldown-sec` and `--impact-log-cooldown-sec`.
+`src.main` also supports debounce tuning: `--post-alert-cooldown-sec` and `--impact-log-cooldown-sec`.
 
 ---
 

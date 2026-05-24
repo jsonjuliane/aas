@@ -21,9 +21,8 @@ from src.config import (
     GEOFENCE_BINAN_FILE,
     PROJECT_ROOT,
     REVERSE_GEOCODE_ENABLED,
-    REVERSE_GEOCODE_TIMEOUT_SEC,
     SMS_ACCIDENT_ADDRESS_MAX_CHARS,
-    SMS_ACCIDENT_COMBINED_MAX_CHARS,
+    SMS_ACCIDENT_COORD_PRECISION,
 )
 
 LocationClass = Literal["inside_binan", "outside_binan", "unknown"]
@@ -212,14 +211,18 @@ def _reverse_geocode_street_address(lat: float, lon: float) -> str | None:
     try:
         from src import geocode
 
-        return geocode.reverse_geocode_short_address(
+        return geocode.reverse_geocode_short_address_with_retries(
             float(lat),
             float(lon),
-            timeout_sec=REVERSE_GEOCODE_TIMEOUT_SEC,
             max_len=SMS_ACCIDENT_ADDRESS_MAX_CHARS,
         )
     except Exception:
         return None
+
+
+def _coord_fallback_label(lat: float, lon: float) -> str:
+    prec = max(0, min(8, int(SMS_ACCIDENT_COORD_PRECISION)))
+    return f"{float(lat):.{prec}f}, {float(lon):.{prec}f}"
 
 
 def _truncate_sms_label(text: str, max_len: int) -> str:
@@ -234,49 +237,46 @@ def _truncate_sms_label(text: str, max_len: int) -> str:
     return label[: max(0, limit - 3)].rstrip() + "..."
 
 
-def format_accident_sms_label(lat: float | None, lon: float | None) -> tuple[str, dict[str, object]]:
+def resolve_accident_sms_address(
+    lat: float | None,
+    lon: float | None,
+) -> tuple[str, dict[str, object]]:
     """
-    Build SMS ``Accident:`` text as barangay + street address when possible.
+    Build SMS ``Accident:`` from reverse geocode at (lat, lon).
 
-    Examples:
-      ``Langkiwa - National Highway, Zapote``
-      ``Langkiwa`` (no geocode)
-      ``National Highway`` (outside Biñan but geocoded)
-      ``N/A``
+    Barangay polygons/centroids are used only for rescuer routing, not this field.
+    When geocode fails but coordinates exist, falls back to the same coordinate string
+    as the ``GPS:`` line so the SMS never shows ``N/A`` with a valid fix.
 
     Returns:
-        (label, details) with keys address, barangay, barangay_method.
+        (label, details) with keys address, source (geocode, coordinates, or none).
     """
-    details: dict[str, object] = {
-        "address": None,
-        "barangay": None,
-        "barangay_method": "none",
-    }
+    details: dict[str, object] = {"address": None, "source": "none"}
     if lat is None or lon is None:
         return "N/A", details
 
-    brgy: str | None = None
-    method = "none"
-    if is_inside_binan(float(lat), float(lon)):
-        brgy, method = resolve_accident_barangay(float(lat), float(lon))
-    details["barangay"] = brgy
-    details["barangay_method"] = method
-
     address = _reverse_geocode_street_address(float(lat), float(lon))
     details["address"] = address
+    if address:
+        details["source"] = "geocode"
+        return _truncate_sms_label(address, SMS_ACCIDENT_ADDRESS_MAX_CHARS), details
 
-    if brgy and address:
-        label = f"{brgy} - {address}"
-    elif brgy:
-        label = brgy
-    elif address:
-        label = address
-    elif is_inside_binan(float(lat), float(lon)):
-        label = "Unknown"
+    coord_label = _coord_fallback_label(float(lat), float(lon))
+    details["source"] = "coordinates"
+    return _truncate_sms_label(coord_label, SMS_ACCIDENT_ADDRESS_MAX_CHARS), details
+
+
+def format_accident_sms_label(lat: float | None, lon: float | None) -> tuple[str, dict[str, object]]:
+    """Alias for :func:`resolve_accident_sms_address` (geocode-only Accident line)."""
+    label, details = resolve_accident_sms_address(lat, lon)
+    if lat is not None and lon is not None and is_inside_binan(float(lat), float(lon)):
+        brgy, method = resolve_accident_barangay(float(lat), float(lon))
+        details["barangay"] = brgy
+        details["barangay_method"] = method
     else:
-        label = "N/A"
-
-    return _truncate_sms_label(label, SMS_ACCIDENT_COMBINED_MAX_CHARS), details
+        details["barangay"] = None
+        details["barangay_method"] = "none"
+    return label, details
 
 
 def _build_notified_summary(
@@ -360,7 +360,7 @@ def get_recipients(
     if accident_rescuer:
         phones.append(accident_rescuer)
     phones = _dedupe_phones_preserve_order(phones)
-    accident_location, accident_location_details = format_accident_sms_label(lat, lon)
+    accident_location, accident_location_details = resolve_accident_sms_address(lat, lon)
 
     notified = _build_notified_summary(
         family_count=len(family_phones),
