@@ -9,7 +9,8 @@ Usage:
     python -m src.main --dry-run        # No hardware; simulate for development
     python -m src.main --core-flow-only # Init + monitor impact detection only
     python -m src.main --test-alert     # Run one full alert cycle immediately (bench test)
-    python -m src.main --test-alert --test-lat 14.299 --test-lon 121.060 --disable-sms-send  # Spoof GPS (Langkiwa)
+    python -m src.main --test-alert --test-lat-lng 14.299 121.060 --disable-sms-send  # Mock GPS (no fix)
+    python -m src.main --test-alert --test-lat 14.299 --test-lon 121.060 --disable-sms-send
 """
 
 from __future__ import annotations
@@ -1103,6 +1104,37 @@ def _print_runtime_hardware_snapshot(audio_mod: audio_mp3.AudioMP3 | None) -> No
         print(f"[{'OK':5}] MP3 feedback OK; TF file count: {tf_count}")
 
 
+def _parse_test_location_from_args(
+    ap: argparse.ArgumentParser,
+    *,
+    test_alert: bool,
+    test_lat: float | None,
+    test_lon: float | None,
+    test_lat_lng: list[float],
+) -> tuple[float, float] | None:
+    """
+    Resolve spoofed GPS for --test-alert (skips real GPS module in alert flow).
+
+    Use either --test-lat-lng LAT LON or --test-lat with --test-lon.
+    """
+    has_pair = test_lat is not None or test_lon is not None
+    has_lat_lng = len(test_lat_lng) > 0
+    if has_pair and has_lat_lng:
+        ap.error("Use either --test-lat-lng LAT LON or --test-lat/--test-lon, not both")
+    if has_pair or has_lat_lng:
+        if not test_alert:
+            ap.error("Mock GPS (--test-lat-lng or --test-lat/--test-lon) requires --test-alert")
+    if has_lat_lng:
+        if len(test_lat_lng) != 2:
+            ap.error("--test-lat-lng requires exactly two numbers: LAT LON")
+        return float(test_lat_lng[0]), float(test_lat_lng[1])
+    if has_pair:
+        if test_lat is None or test_lon is None:
+            ap.error("--test-lat and --test-lon must be used together")
+        return float(test_lat), float(test_lon)
+    return None
+
+
 def main() -> int:
     """Entry point. Returns 0 on normal exit."""
     ap = argparse.ArgumentParser(description="SmartShell accident alert system")
@@ -1127,16 +1159,24 @@ def main() -> int:
         help="Do not send real SMS; log that SMS is intentionally disabled",
     )
     ap.add_argument(
+        "--test-lat-lng",
+        nargs=2,
+        type=float,
+        metavar=("LAT", "LON"),
+        default=argparse.SUPPRESS,
+        help="Mock GPS for --test-alert only (skips GPS hardware); e.g. --test-lat-lng 14.299 121.060",
+    )
+    ap.add_argument(
         "--test-lat",
         type=float,
         default=None,
-        help="Spoof GPS latitude for --test-alert only (requires --test-lon)",
+        help="Mock GPS latitude for --test-alert (requires --test-lon; or use --test-lat-lng)",
     )
     ap.add_argument(
         "--test-lon",
         type=float,
         default=None,
-        help="Spoof GPS longitude for --test-alert only (requires --test-lat)",
+        help="Mock GPS longitude for --test-alert (requires --test-lat; or use --test-lat-lng)",
     )
     ap.add_argument(
         "--voice-cancel-keyword",
@@ -1172,13 +1212,14 @@ def main() -> int:
     )
     args = ap.parse_args()
     test_now = args.test_alert or args.trigger
-    test_location: tuple[float, float] | None = None
-    if args.test_lat is not None or args.test_lon is not None:
-        if not test_now:
-            ap.error("--test-lat/--test-lon are only allowed with --test-alert")
-        if args.test_lat is None or args.test_lon is None:
-            ap.error("--test-lat and --test-lon must be used together")
-        test_location = (float(args.test_lat), float(args.test_lon))
+    test_lat_lng = getattr(args, "test_lat_lng", [])
+    test_location = _parse_test_location_from_args(
+        ap,
+        test_alert=test_now,
+        test_lat=args.test_lat,
+        test_lon=args.test_lon,
+        test_lat_lng=list(test_lat_lng),
+    )
     run(
         dry_run=args.dry_run,
         core_flow_only=args.core_flow_only,
