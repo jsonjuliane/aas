@@ -165,8 +165,7 @@ def format_message(
 
     Args:
         template: Template with optional placeholders (see module default).
-        accident_barangay: Resolved accident place for SMS (street address if geocoded,
-            else nearest barangay name inside Biñan, or None / N/A).
+        accident_barangay: SMS Accident line (e.g. ``Langkiwa - Main St`` or barangay only).
         notified: Summary of recipient groups from routing.
         sms_plain_coords: If True, {map_url} is "lat, lon" only (Globe often blocks https URLs).
     """

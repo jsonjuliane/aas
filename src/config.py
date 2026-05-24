@@ -79,7 +79,8 @@ COUNTDOWN_USE_MP3 = False
 # Accident SMS ``Accident:`` field — reverse geocode lat/lon to street address (Nominatim; needs internet).
 REVERSE_GEOCODE_ENABLED = True
 REVERSE_GEOCODE_TIMEOUT_SEC = 5.0
-SMS_ACCIDENT_ADDRESS_MAX_CHARS = 48  # keep short for single-part SMS with family template
+SMS_ACCIDENT_ADDRESS_MAX_CHARS = 40  # street fragment in combined Accident line
+SMS_ACCIDENT_COMBINED_MAX_CHARS = 56  # "Barangay - address" in single-part SMS
 
 # Voice / mic cancel during countdown
 # Primary fallback: GPIO button (CANCEL_BUTTON_GPIO). Keyword cancel needs Pi internet (Google STT).
@@ -117,3 +118,4 @@ LOGS_DIR = "logs"
 CONTACTS_BARANGAY_FILE = "contacts.barangay.json"
 GEOFENCE_BINAN_FILE = "geofence.binan.json"
 BARANGAY_CENTROIDS_BINAN_FILE = "barangay_centroids.binan.json"
+BARANGAY_BOUNDARIES_BINAN_FILE = "barangay_boundaries.binan.json"

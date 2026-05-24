@@ -31,15 +31,25 @@ Use `shapely` to test point-in-polygon. Boundary coordinates in `geofence.binan.
 
 ## Accident location in SMS (``Accident:`` field)
 
-When GPS is available and `REVERSE_GEOCODE_ENABLED` is True, `resolve_accident_location_label()` calls
-Nominatim (internet) for a short **street/area address**. If that fails, inside Biñan falls back to the
-nearest barangay name from `barangay_centroids.binan.json`.
+`format_accident_sms_label()` builds the ``Accident:`` line:
 
-**Rescuer phone routing** still uses nearest centroid → `contacts.barangay.json` (not the street string).
+| Pieces available | SMS example |
+|------------------|-------------|
+| Barangay + street (geocode) | `Langkiwa - National Highway, Zapote` |
+| Barangay only | `Langkiwa` |
+| Street only (outside Biñan) | `Quezon Avenue, Manila` |
+| Neither | `N/A` |
+
+Street text uses Nominatim when `REVERSE_GEOCODE_ENABLED` is True (internet at alert time).
 
 ## Accident barangay (routing, inside Biñan)
 
-When GPS is inside the city boundary, `resolve_accident_barangay()` picks the nearest reference point in `barangay_centroids.binan.json` (OSM/Nominatim centroids). Recipient list adds that barangay's rescuer phone from `contacts.barangay.json`. SMS includes `{accident_barangay}` and `{notified}`.
+1. **Polygon** — point inside `barangay_boundaries.binan.json` (Voronoi cells clipped to city geofence).
+2. **Fallback** — nearest point in `barangay_centroids.binan.json` if no polygon matches.
+
+Regenerate polygons: `python scripts/generate_barangay_boundaries.py` (needs `shapely`).
+
+Recipient list uses the resolved barangay name → `contacts.barangay.json`. SMS includes combined `{accident_barangay}` and `{notified}`.
 
 ## References
 

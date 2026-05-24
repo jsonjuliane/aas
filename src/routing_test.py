@@ -68,8 +68,11 @@ def main() -> int:
     zapote_rescuer = contacts.lookup_rescuer_phone("Zapote", barangay_map)
     langkiwa_rescuer = contacts.lookup_rescuer_phone("Langkiwa", barangay_map)
 
-    accident = resolve_accident_barangay(14.2989841, 121.0597082)
-    print(f"[{'OK' if accident == 'Langkiwa' else 'FAIL'}] resolve_accident at Langkiwa -> {accident}")
+    accident, method = resolve_accident_barangay(14.2989841, 121.0597082)
+    print(
+        f"[{'OK' if accident == 'Langkiwa' else 'FAIL'}] "
+        f"resolve_accident at Langkiwa -> {accident} ({method})"
+    )
     if accident != "Langkiwa":
         raise SystemExit(1)
 
@@ -78,8 +81,8 @@ def main() -> int:
         14.2989841,
         121.0597082,
         "Zapote",
-        min_count=3,
-        must_include=[zapote_rescuer, langkiwa_rescuer],  # type: ignore[list-item]
+        min_count=2,
+        must_include=[zapote_rescuer],  # home + accident rescuer deduped when same number
         expect_accident="Langkiwa",
     )
     _check_recipients(

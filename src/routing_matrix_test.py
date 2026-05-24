@@ -41,7 +41,9 @@ def _run_case(
     ok = True
     if lat is not None and lon is not None:
         inside = is_inside_binan(lat, lon)
-        accident = resolve_accident_barangay(lat, lon) if inside else None
+        accident, _brgy_method = (
+            resolve_accident_barangay(lat, lon) if inside else (None, "none")
+        )
     else:
         inside = None
         accident = None

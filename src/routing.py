@@ -15,6 +15,7 @@ from src import contacts
 import math
 
 from src.config import (
+    BARANGAY_BOUNDARIES_BINAN_FILE,
     BARANGAY_CENTROIDS_BINAN_FILE,
     CONFIG_DIR,
     GEOFENCE_BINAN_FILE,
@@ -22,6 +23,7 @@ from src.config import (
     REVERSE_GEOCODE_ENABLED,
     REVERSE_GEOCODE_TIMEOUT_SEC,
     SMS_ACCIDENT_ADDRESS_MAX_CHARS,
+    SMS_ACCIDENT_COMBINED_MAX_CHARS,
 )
 
 LocationClass = Literal["inside_binan", "outside_binan", "unknown"]
@@ -132,15 +134,43 @@ def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * r * math.asin(math.sqrt(min(1.0, a)))
 
 
-def resolve_accident_barangay(lat: float, lon: float) -> str | None:
-    """
-    Resolve accident barangay name from GPS when inside Biñan.
+def _parse_boundary_ring(boundary: object, *, path_hint: str) -> list[tuple[float, float]]:
+    if not isinstance(boundary, list) or len(boundary) < 4:
+        raise ValueError(f"Invalid boundary in {path_hint}: need at least 4 points")
+    ring: list[tuple[float, float]] = []
+    for pt in boundary:
+        if not isinstance(pt, (list, tuple)) or len(pt) < 2:
+            raise ValueError(f"Invalid boundary point in {path_hint}: {pt!r}")
+        ring.append((float(pt[0]), float(pt[1])))
+    if ring[0] != ring[-1]:
+        ring.append(ring[0])
+    return ring
 
-    Uses nearest reference centroid from barangay_centroids.binan.json.
-    Returns None when coordinates are outside Biñan.
-    """
-    if not is_inside_binan(lat, lon):
-        return None
+
+@lru_cache(maxsize=1)
+def _load_barangay_polygons() -> list[tuple[str, object]]:
+    """Load (name, shapely polygon) for each barangay boundary file entry."""
+    from shapely.geometry import Polygon
+
+    path = PROJECT_ROOT / CONFIG_DIR / BARANGAY_BOUNDARIES_BINAN_FILE
+    if not path.exists():
+        return []
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    entries = data.get("barangays", [])
+    out: list[tuple[str, object]] = []
+    for entry in entries:
+        name = entry.get("name")
+        boundary = entry.get("boundary")
+        if not name or boundary is None:
+            continue
+        ring = _parse_boundary_ring(boundary, path_hint=str(path))
+        out.append((str(name), Polygon(ring)))
+    return out
+
+
+def _resolve_accident_barangay_centroid(lat: float, lon: float) -> str | None:
+    """Nearest centroid fallback when polygon lookup misses."""
     centroids = _load_barangay_centroids()
     best_name: str | None = None
     best_dist = float("inf")
@@ -152,34 +182,101 @@ def resolve_accident_barangay(lat: float, lon: float) -> str | None:
     return best_name
 
 
-def resolve_accident_location_label(lat: float | None, lon: float | None) -> str:
+def resolve_accident_barangay(lat: float, lon: float) -> tuple[str | None, str]:
     """
-    Human-readable accident place for SMS ``Accident:`` field.
+    Resolve accident barangay name from GPS when inside Biñan.
 
-    Prefers reverse-geocoded street address when enabled and online; otherwise
-    nearest barangay name inside Biñan; else N/A.
+    Uses barangay_boundaries.binan.json (point-in-polygon) when present;
+    falls back to nearest centroid from barangay_centroids.binan.json.
+
+    Returns:
+        (barangay_name or None, method) where method is polygon, centroid, or none.
     """
+    if not is_inside_binan(lat, lon):
+        return None, "none"
+    from shapely.geometry import Point
+
+    pt = Point(float(lon), float(lat))
+    for name, poly in _load_barangay_polygons():
+        if poly.contains(pt):
+            return name, "polygon"
+    brgy = _resolve_accident_barangay_centroid(lat, lon)
+    if brgy:
+        return brgy, "centroid"
+    return None, "none"
+
+
+def _reverse_geocode_street_address(lat: float, lon: float) -> str | None:
+    if not REVERSE_GEOCODE_ENABLED:
+        return None
+    try:
+        from src import geocode
+
+        return geocode.reverse_geocode_short_address(
+            float(lat),
+            float(lon),
+            timeout_sec=REVERSE_GEOCODE_TIMEOUT_SEC,
+            max_len=SMS_ACCIDENT_ADDRESS_MAX_CHARS,
+        )
+    except Exception:
+        return None
+
+
+def _truncate_sms_label(text: str, max_len: int) -> str:
+    from src.contacts import sms_safe_for_gsm7
+
+    label = sms_safe_for_gsm7(text.strip())
+    if not label:
+        return ""
+    limit = max(8, int(max_len))
+    if len(label) <= limit:
+        return label
+    return label[: max(0, limit - 3)].rstrip() + "..."
+
+
+def format_accident_sms_label(lat: float | None, lon: float | None) -> tuple[str, dict[str, object]]:
+    """
+    Build SMS ``Accident:`` text as barangay + street address when possible.
+
+    Examples:
+      ``Langkiwa - National Highway, Zapote``
+      ``Langkiwa`` (no geocode)
+      ``National Highway`` (outside Biñan but geocoded)
+      ``N/A``
+
+    Returns:
+        (label, details) with keys address, barangay, barangay_method.
+    """
+    details: dict[str, object] = {
+        "address": None,
+        "barangay": None,
+        "barangay_method": "none",
+    }
     if lat is None or lon is None:
-        return "N/A"
-    if REVERSE_GEOCODE_ENABLED:
-        try:
-            from src import geocode
+        return "N/A", details
 
-            address = geocode.reverse_geocode_short_address(
-                float(lat),
-                float(lon),
-                timeout_sec=REVERSE_GEOCODE_TIMEOUT_SEC,
-                max_len=SMS_ACCIDENT_ADDRESS_MAX_CHARS,
-            )
-            if address:
-                return address
-        except Exception:
-            pass
-    # Fallback: nearest barangay name (routing for rescuer phones still uses centroids).
-    if is_inside_binan(lat, lon):
-        brgy = resolve_accident_barangay(lat, lon)
-        return brgy if brgy else "Unknown"
-    return "N/A"
+    brgy: str | None = None
+    method = "none"
+    if is_inside_binan(float(lat), float(lon)):
+        brgy, method = resolve_accident_barangay(float(lat), float(lon))
+    details["barangay"] = brgy
+    details["barangay_method"] = method
+
+    address = _reverse_geocode_street_address(float(lat), float(lon))
+    details["address"] = address
+
+    if brgy and address:
+        label = f"{brgy} - {address}"
+    elif brgy:
+        label = brgy
+    elif address:
+        label = address
+    elif is_inside_binan(float(lat), float(lon)):
+        label = "Unknown"
+    else:
+        label = "N/A"
+
+    return _truncate_sms_label(label, SMS_ACCIDENT_COMBINED_MAX_CHARS), details
 
 
 def _build_notified_summary(
@@ -227,7 +324,7 @@ def get_recipients(
     Rules:
       - Always: family contacts (priority order)
       - Always when matched: home barangay rescuer
-      - Inside Biñan + GPS: add accident barangay rescuer (nearest centroid)
+      - Inside Biñan + GPS: add accident barangay rescuer (polygon or centroid)
       - Outside Biñan / no GPS: family + home only
 
     Returns:
@@ -245,8 +342,9 @@ def get_recipients(
     accident_barangay: str | None = None
     accident_rescuer: str | None = None
     accident_rescuer_matched = False
+    accident_barangay_method = "none"
     if location_class == "inside_binan" and lat is not None and lon is not None:
-        accident_barangay = resolve_accident_barangay(lat, lon)
+        accident_barangay, accident_barangay_method = resolve_accident_barangay(lat, lon)
         if accident_barangay:
             accident_rescuer = contacts.lookup_rescuer_phone(
                 accident_barangay,
@@ -262,7 +360,7 @@ def get_recipients(
     if accident_rescuer:
         phones.append(accident_rescuer)
     phones = _dedupe_phones_preserve_order(phones)
-    accident_location = resolve_accident_location_label(lat, lon)
+    accident_location, accident_location_details = format_accident_sms_label(lat, lon)
 
     notified = _build_notified_summary(
         family_count=len(family_phones),
@@ -287,7 +385,9 @@ def get_recipients(
         "home_rescuer_phone": home_rescuer,
         "home_rescuer_matched": home_rescuer is not None,
         "accident_barangay": accident_barangay,
+        "accident_barangay_method": accident_barangay_method,
         "accident_location": accident_location,
+        "accident_location_details": accident_location_details,
         "accident_rescuer_phone": accident_rescuer,
         "accident_rescuer_matched": accident_rescuer_matched,
         "notified": notified,

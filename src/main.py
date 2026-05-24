@@ -924,7 +924,13 @@ def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool
     if accident_sms in (None, "", "N/A"):
         accident_sms = None
     if accident_sms:
-        print(f"Accident SMS label: {accident_sms}")
+        loc_detail = route.get("accident_location_details") or {}
+        brgy_method = route.get("accident_barangay_method", "none")
+        print(
+            f"Accident SMS label: {accident_sms} "
+            f"(barangay={loc_detail.get('barangay')}, method={brgy_method}, "
+            f"address={loc_detail.get('address')})"
+        )
 
     message = contacts.format_alert_message(
         template=template,
