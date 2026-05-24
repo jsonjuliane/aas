@@ -61,5 +61,5 @@ Verify on Pi:
 
 ```bash
 python -m src.sms_config_check
-python -m src.gsm_test --send-alert-sms +639568504890
+python -m src.gsm_test --send-alert-sms +639202828660
 ```

@@ -73,6 +73,13 @@ TILT_DELTA_THRESHOLD_G = 0.5  # Baseline delta required to validate true collisi
 ACTION_COOLDOWN_SEC = 8.0  # Debounce action flow after a true collision
 IMPACT_LOG_COOLDOWN_SEC = 0.75  # Debounce impact candidate logs in main loop
 COUNTDOWN_SECONDS = 10
+# Countdown cues: buzzer beeps (default). Set True only if DFPlayer MP3 module is wired and working.
+COUNTDOWN_USE_MP3 = False
+
+# Accident SMS ``Accident:`` field — reverse geocode lat/lon to street address (Nominatim; needs internet).
+REVERSE_GEOCODE_ENABLED = True
+REVERSE_GEOCODE_TIMEOUT_SEC = 5.0
+SMS_ACCIDENT_ADDRESS_MAX_CHARS = 48  # keep short for single-part SMS with family template
 
 # Voice / mic cancel during countdown
 # Primary fallback: GPIO button (CANCEL_BUTTON_GPIO). Keyword cancel needs Pi internet (Google STT).

@@ -19,6 +19,9 @@ from src.config import (
     CONFIG_DIR,
     GEOFENCE_BINAN_FILE,
     PROJECT_ROOT,
+    REVERSE_GEOCODE_ENABLED,
+    REVERSE_GEOCODE_TIMEOUT_SEC,
+    SMS_ACCIDENT_ADDRESS_MAX_CHARS,
 )
 
 LocationClass = Literal["inside_binan", "outside_binan", "unknown"]
@@ -149,6 +152,36 @@ def resolve_accident_barangay(lat: float, lon: float) -> str | None:
     return best_name
 
 
+def resolve_accident_location_label(lat: float | None, lon: float | None) -> str:
+    """
+    Human-readable accident place for SMS ``Accident:`` field.
+
+    Prefers reverse-geocoded street address when enabled and online; otherwise
+    nearest barangay name inside Biñan; else N/A.
+    """
+    if lat is None or lon is None:
+        return "N/A"
+    if REVERSE_GEOCODE_ENABLED:
+        try:
+            from src import geocode
+
+            address = geocode.reverse_geocode_short_address(
+                float(lat),
+                float(lon),
+                timeout_sec=REVERSE_GEOCODE_TIMEOUT_SEC,
+                max_len=SMS_ACCIDENT_ADDRESS_MAX_CHARS,
+            )
+            if address:
+                return address
+        except Exception:
+            pass
+    # Fallback: nearest barangay name (routing for rescuer phones still uses centroids).
+    if is_inside_binan(lat, lon):
+        brgy = resolve_accident_barangay(lat, lon)
+        return brgy if brgy else "Unknown"
+    return "N/A"
+
+
 def _build_notified_summary(
     *,
     family_count: int,
@@ -229,6 +262,7 @@ def get_recipients(
     if accident_rescuer:
         phones.append(accident_rescuer)
     phones = _dedupe_phones_preserve_order(phones)
+    accident_location = resolve_accident_location_label(lat, lon)
 
     notified = _build_notified_summary(
         family_count=len(family_phones),
@@ -253,6 +287,7 @@ def get_recipients(
         "home_rescuer_phone": home_rescuer,
         "home_rescuer_matched": home_rescuer is not None,
         "accident_barangay": accident_barangay,
+        "accident_location": accident_location,
         "accident_rescuer_phone": accident_rescuer,
         "accident_rescuer_matched": accident_rescuer_matched,
         "notified": notified,

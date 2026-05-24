@@ -64,7 +64,8 @@ def _run_case(
     print(f"  GPS: {lat}, {lon}")
     print(f"  Inside Biñan: {inside}")
     print(f"  Area: {area}")
-    print(f"  Accident barangay: {route.get('accident_barangay')}")
+    print(f"  Accident barangay (routing): {route.get('accident_barangay')}")
+    print(f"  Accident SMS label: {route.get('accident_location')}")
     print(f"  Recipients ({len(route['phones'])}): {route.get('phones')}")
     print(f"  Notified: {route.get('notified')}")
     if sms_preview:
@@ -75,9 +76,7 @@ def _run_case(
             rider_name=rider_name,
             home_barangay=home_barangay,
             area=area,
-            accident_barangay=route.get("accident_barangay")
-            if route.get("accident_barangay")
-            else None,
+            accident_barangay=route.get("accident_location") or route.get("accident_barangay"),
             notified=str(route.get("notified", "")),
         )
         print("  --- SMS preview ---")

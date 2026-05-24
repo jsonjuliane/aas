@@ -5,9 +5,9 @@ Each message starts with [SSnn] so you can note which IDs arrived.
 
 Run on Raspberry Pi (project root, venv):
   python -m src.gsm_sms_matrix_test --list
-  python -m src.gsm_sms_matrix_test --phone +639568504890 --dry-run
-  python -m src.gsm_sms_matrix_test --phone +639568504890 --confirm
-  python -m src.gsm_sms_matrix_test --phone +639568504890 --confirm --only 01,05,12
+  python -m src.gsm_sms_matrix_test --phone +639202828660 --dry-run
+  python -m src.gsm_sms_matrix_test --phone +639202828660 --confirm
+  python -m src.gsm_sms_matrix_test --phone +639202828660 --confirm --only 01,05,12
 """
 
 from __future__ import annotations

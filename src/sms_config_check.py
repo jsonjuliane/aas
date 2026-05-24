@@ -3,7 +3,7 @@ Verify family SMS config for Globe/SIM800 single-part delivery.
 
 Run on the Pi after git pull:
   python -m src.sms_config_check
-  python -m src.sms_config_check --send-test +639568504890
+  python -m src.sms_config_check --send-test +639202828660
 """
 
 from __future__ import annotations

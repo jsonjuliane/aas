@@ -31,7 +31,9 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.config import (
     ACTION_COOLDOWN_SEC,
+    BUZZER_COUNTDOWN_ENABLED,
     COUNTDOWN_SECONDS,
+    COUNTDOWN_USE_MP3,
     GPS_COLLISION_FIX_TIMEOUT_SEC,
     IMPACT_LOG_COOLDOWN_SEC,
     MP3_DEFAULT_TRACK,
@@ -301,13 +303,16 @@ def run(
         poll_interval_sec: Seconds between sensor polls.
     """
     sensor = sensor_mpu6050.SensorMPU6050(dry_run=dry_run)
-    audio_mod = audio_mp3.AudioMP3(dry_run=dry_run)
+    audio_mod: audio_mp3.AudioMP3 | None = (
+        audio_mp3.AudioMP3(dry_run=dry_run) if COUNTDOWN_USE_MP3 else None
+    )
 
     try:
         if not dry_run:
             sensor.calibrate()
             cancel.init()
-        audio_mod.open()
+        if audio_mod is not None:
+            audio_mod.open()
         if not dry_run:
             buzzer_hw.silence()
         _print_init_status(
@@ -438,24 +443,28 @@ def run(
         print("\nStopped.")
     finally:
         sensor.close()
-        audio_mod.close()
+        if audio_mod is not None:
+            audio_mod.close()
         if not dry_run:
             buzzer_hw.silence()
 
 
 def _handle_alert(
     sensor: sensor_mpu6050.SensorMPU6050,
-    audio_mod: audio_mp3.AudioMP3,
+    audio_mod: audio_mp3.AudioMP3 | None,
     dry_run: bool,
     disable_sms_send: bool,
     voice_cancel_keyword: str,
     voice_device_index: int | None,
     test_location: tuple[float, float] | None = None,
 ) -> None:
-    """Play countdown audio and log event for this phase."""
+    """Run countdown cancel window (buzzer or optional MP3) and SMS if not cancelled."""
     ax, ay, az = sensor.read_g() if not dry_run else (0.0, 0.0, 0.0)
     location = _resolve_collision_location(dry_run=dry_run, test_location=test_location)
-    track_num, selection_reason = _select_countdown_audio(audio_mod=audio_mod, dry_run=dry_run)
+    track_num = 0
+    selection_reason = "buzzer_countdown"
+    if COUNTDOWN_USE_MP3 and audio_mod is not None:
+        track_num, selection_reason = _select_countdown_audio(audio_mod=audio_mod, dry_run=dry_run)
 
     voice_ctx = _prepare_voice_cancel(dry_run, voice_cancel_keyword, voice_device_index)
     if not dry_run:
@@ -481,42 +490,48 @@ def _handle_alert(
     cancel_reason = "before_cancel_window"
     play_status: dict = {}
     try:
-        # DFPlayer layout: SD:/mp3/0001.mp3 etc.; command 0x03 (see mp3_play_command log).
-        if not dry_run:
-            audio_mod.set_volume(MP3_DEFAULT_VOLUME)
-            print(f"[MP3] Volume set to {max(0, min(30, int(MP3_DEFAULT_VOLUME)))}")
-        play_status = audio_mod.play_track_with_status(track_num)
-        ts_cmd = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
-        logging_store.log_event(
-            {
-                "event": "mp3_play_command",
-                "timestamp": ts_cmd,
-                "volume": max(0, min(30, int(MP3_DEFAULT_VOLUME))) if not dry_run else None,
-                "selection_reason": selection_reason,
-                "ok": bool(play_status.get("ok")),
-                "reason": play_status.get("reason"),
-                "transport": play_status.get("transport"),
-                "serial_device": play_status.get("serial_device"),
-                "command": play_status.get("command"),
-                "param": play_status.get("param"),
-                "packet_hex": play_status.get("packet_hex"),
-                "path_hint": play_status.get("path_hint"),
-            }
-        )
-        if play_status.get("ok"):
-            print(
-                f"[MP3] Play command sent (0x{int(play_status.get('command', 0)):02x} "
-                f"track={play_status.get('param')}, transport={play_status.get('transport')}, "
-                f"serial={play_status.get('serial_device') or 'n/a'}, "
-                f"packet={play_status.get('packet_hex')})"
+        if COUNTDOWN_USE_MP3 and audio_mod is not None:
+            if not dry_run:
+                audio_mod.set_volume(MP3_DEFAULT_VOLUME)
+                print(f"[MP3] Volume set to {max(0, min(30, int(MP3_DEFAULT_VOLUME)))}")
+            play_status = audio_mod.play_track_with_status(track_num)
+            ts_cmd = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+            logging_store.log_event(
+                {
+                    "event": "mp3_play_command",
+                    "timestamp": ts_cmd,
+                    "volume": max(0, min(30, int(MP3_DEFAULT_VOLUME))) if not dry_run else None,
+                    "selection_reason": selection_reason,
+                    "ok": bool(play_status.get("ok")),
+                    "reason": play_status.get("reason"),
+                    "transport": play_status.get("transport"),
+                    "serial_device": play_status.get("serial_device"),
+                    "command": play_status.get("command"),
+                    "param": play_status.get("param"),
+                    "packet_hex": play_status.get("packet_hex"),
+                    "path_hint": play_status.get("path_hint"),
+                }
             )
+            if play_status.get("ok"):
+                print(
+                    f"[MP3] Play command sent (0x{int(play_status.get('command', 0)):02x} "
+                    f"track={play_status.get('param')}, transport={play_status.get('transport')}, "
+                    f"serial={play_status.get('serial_device') or 'n/a'}, "
+                    f"packet={play_status.get('packet_hex')})"
+                )
+            else:
+                print(
+                    f"[MP3] Play command failed: {play_status.get('reason')} "
+                    f"(transport={play_status.get('transport')}); "
+                    "module may not receive UART — check TX wiring and power."
+                )
+            print(f"Countdown audio selected: mp3/{track_num:04d}.mp3 ({selection_reason})")
         else:
+            mode = "buzzer beeps" if BUZZER_COUNTDOWN_ENABLED else "silent"
             print(
-                f"[MP3] Play command failed: {play_status.get('reason')} "
-                f"(transport={play_status.get('transport')}); "
-                "module may not receive UART — check TX wiring and power."
+                f"Countdown: {mode} for {int(COUNTDOWN_SECONDS)}s "
+                "(button/voice cancel active; MP3 disabled)."
             )
-        print(f"Countdown audio selected: mp3/{track_num:04d}.mp3 ({selection_reason})")
         cancelled, cancel_reason = _wait_for_cancel_window(
             timeout_sec=max(0.5, float(COUNTDOWN_SECONDS)),
             dry_run=dry_run,
@@ -532,7 +547,8 @@ def _handle_alert(
             cancel_reason=cancel_reason,
         )
         _close_voice_cancel_context(voice_ctx)
-    audio_mod.stop()
+    if audio_mod is not None:
+        audio_mod.stop()
     if cancelled:
         print(f"Countdown cancelled ({cancel_reason}). SMS flow aborted.")
         logging_store.log_event(
@@ -540,8 +556,9 @@ def _handle_alert(
                 "event": "alert_cancelled",
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
                 "reason": cancel_reason,
+                "countdown_mode": "mp3" if COUNTDOWN_USE_MP3 else "buzzer",
                 "audio_selected": {
-                    "path": f"mp3/{track_num:04d}.mp3",
+                    "path": f"mp3/{track_num:04d}.mp3" if COUNTDOWN_USE_MP3 else "buzzer",
                     "track": track_num,
                     "reason": selection_reason,
                 },
@@ -550,7 +567,9 @@ def _handle_alert(
                     "reason": play_status.get("reason"),
                     "transport": play_status.get("transport"),
                     "packet_hex": play_status.get("packet_hex"),
-                },
+                }
+                if COUNTDOWN_USE_MP3
+                else None,
             }
         )
         return
@@ -569,8 +588,9 @@ def _handle_alert(
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
             "accel_g": {"ax": ax, "ay": ay, "az": az},
             "countdown_seconds": COUNTDOWN_SECONDS,
+            "countdown_mode": "mp3" if COUNTDOWN_USE_MP3 else "buzzer",
             "audio_selected": {
-                "path": f"mp3/{track_num:04d}.mp3",
+                "path": f"mp3/{track_num:04d}.mp3" if COUNTDOWN_USE_MP3 else "buzzer",
                 "track": track_num,
                 "reason": selection_reason,
             },
@@ -579,7 +599,9 @@ def _handle_alert(
                 "reason": play_status.get("reason"),
                 "transport": play_status.get("transport"),
                 "packet_hex": play_status.get("packet_hex"),
-            },
+            }
+            if COUNTDOWN_USE_MP3
+            else None,
             "collision_location": location,
         }
     )
@@ -589,7 +611,7 @@ def _handle_alert(
 def _wait_for_cancel_window(
     timeout_sec: float,
     dry_run: bool,
-    audio_mod: audio_mp3.AudioMP3,
+    audio_mod: audio_mp3.AudioMP3 | None,
     voice_cancel_keyword: str,
     *,
     voice_ctx: VoiceCancelContext,
@@ -602,6 +624,7 @@ def _wait_for_cancel_window(
     """
     timeout_sec = max(0.2, float(timeout_sec))
     keyword = voice_cancel_keyword.strip().lower() or "cancel"
+    use_mp3_timing = bool(COUNTDOWN_USE_MP3 and audio_mod is not None)
     playback_feedback_known = False
     playback_done = False
     announced_audio_mode = False
@@ -622,7 +645,7 @@ def _wait_for_cancel_window(
         """Wall-clock fallback countdown logs (survives main-thread blocking)."""
         last_rem: int | None = None
         while not stop_tick.is_set():
-            if playback_known_shared[0]:
+            if use_mp3_timing and playback_known_shared[0]:
                 return
             now = time.monotonic()
             if now >= t_fallback_end:
@@ -680,6 +703,14 @@ def _wait_for_cancel_window(
         else:
             print("[Mic] Cancel window active — microphone paths inactive (button cancel only).")
 
+    if not use_mp3_timing and not announced_audio_mode:
+        mode = "buzzer beeps" if BUZZER_COUNTDOWN_ENABLED else "silent"
+        print(
+            f"Cancel window: full {int(timeout_sec)}s ({mode}); "
+            "button/voice cancel active until timeout."
+        )
+        announced_audio_mode = True
+
     try:
         while time.monotonic() < t_hard_end:
             # GPIO/button cancel path
@@ -705,29 +736,31 @@ def _wait_for_cancel_window(
                 if voice_ctx.keyword_session.cancel_requested:
                     return True, "voice_cancel"
 
-            # Keep checking whether playback already ended when serial feedback exists.
-            waited = audio_mod.wait_for_playback_end(timeout_sec=0.05, poll_interval_sec=0.05)
-            if waited is True:
-                playback_feedback_known = True
-                playback_done = True
-            elif waited is False:
-                playback_feedback_known = True
-                playback_done = False
-
             now = time.monotonic()
-            if playback_feedback_known:
-                playback_known_shared[0] = True
-                if not announced_audio_mode:
-                    print(
-                        "Cancel window follows actual MP3 playback duration "
-                        "(speak or use button cancel while audio is playing)."
-                    )
-                    announced_audio_mode = True
-            # Fallback countdown lines are printed by _fallback_second_ticker.
 
-            if playback_feedback_known:
-                if playback_done:
-                    return False, "audio_finished"
+            if use_mp3_timing and audio_mod is not None:
+                waited = audio_mod.wait_for_playback_end(timeout_sec=0.05, poll_interval_sec=0.05)
+                if waited is True:
+                    playback_feedback_known = True
+                    playback_done = True
+                elif waited is False:
+                    playback_feedback_known = True
+                    playback_done = False
+
+                if playback_feedback_known:
+                    playback_known_shared[0] = True
+                    if not announced_audio_mode:
+                        print(
+                            "Cancel window follows actual MP3 playback duration "
+                            "(speak or use button cancel while audio is playing)."
+                        )
+                        announced_audio_mode = True
+
+                if playback_feedback_known:
+                    if playback_done:
+                        return False, "audio_finished"
+                elif now >= t_fallback_end:
+                    return False, "timeout_fallback"
             elif now >= t_fallback_end:
                 return False, "timeout_fallback"
             time.sleep(0.02)
@@ -887,6 +920,12 @@ def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool
         }
     )
 
+    accident_sms = route.get("accident_location") or route.get("accident_barangay")
+    if accident_sms in (None, "", "N/A"):
+        accident_sms = None
+    if accident_sms:
+        print(f"Accident SMS label: {accident_sms}")
+
     message = contacts.format_alert_message(
         template=template,
         lat=lat,
@@ -894,9 +933,7 @@ def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool
         rider_name=rider_name,
         home_barangay=home_barangay,
         area=area,
-        accident_barangay=route.get("accident_barangay")
-        if route.get("accident_barangay")
-        else None,
+        accident_barangay=accident_sms,
         notified=str(route.get("notified", "")),
     )
     sms_parts = contacts.message_parts_for_delivery(message)
@@ -978,7 +1015,7 @@ def _send_alert_sms(location: dict | None, dry_run: bool, disable_sms_send: bool
 def _print_init_status(
     dry_run: bool,
     core_flow_only: bool,
-    audio_mod: audio_mp3.AudioMP3,
+    audio_mod: audio_mp3.AudioMP3 | None,
 ) -> None:
     """Print startup status for the current phase flow."""
     if dry_run:
@@ -990,7 +1027,7 @@ def _print_init_status(
         print("Core-flow mode active: monitoring and logs only, no action audio.")
 
 
-def _print_runtime_hardware_snapshot(audio_mod: audio_mp3.AudioMP3) -> None:
+def _print_runtime_hardware_snapshot(audio_mod: audio_mp3.AudioMP3 | None) -> None:
     """Print quick hardware-ready snapshot for runtime flow."""
     gsm = hardware_check.probe_gsm_readiness()
     gsm_ok = bool(gsm.get("ok_at"))
@@ -1019,6 +1056,11 @@ def _print_runtime_hardware_snapshot(audio_mod: audio_mp3.AudioMP3) -> None:
     finally:
         gps_mod.close()
     print(f"[{'OK' if gps_ok else 'ERR':5}] GPS stream check: {gps_hint}")
+
+    if audio_mod is None:
+        mode = "enabled" if BUZZER_COUNTDOWN_ENABLED else "disabled"
+        print(f"[{'OK':5}] Countdown: buzzer {mode} (MP3 not used)")
+        return
 
     mp3_transport_ok = (audio_mod._ser is not None) or (audio_mod._pi is not None)
     if not mp3_transport_ok:

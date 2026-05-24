@@ -4,10 +4,10 @@ Isolated SIM800L GSM diagnostic (multi-baud AT, SIM, registration, signal).
 Run on Raspberry Pi:
     python -m src.gsm_test
     python -m src.gsm_test --send-sms +639171234567 "Test message"
-    python -m src.gsm_test --send-alert-sms +639568504890
-    python -m src.gsm_test --send-test-sms +639568504890
-    python -m src.gsm_test --send-map-url-test +639568504890
-    python -m src.gsm_test --send-sms +639568504890 --message-file /tmp/alert.txt
+    python -m src.gsm_test --send-alert-sms +639202828660
+    python -m src.gsm_test --send-test-sms +639202828660
+    python -m src.gsm_test --send-map-url-test +639202828660
+    python -m src.gsm_test --send-sms +639202828660 --message-file /tmp/alert.txt
 """
 
 from __future__ import annotations
