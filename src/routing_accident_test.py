@@ -3,10 +3,10 @@ Bench test for SMS ``Accident:`` resolver modes (geocode, polygon, centroid, aut
 
 Run from project root (needs shapely + config; geocode modes need internet):
 
-  python -m src.routing_accident_test
-  python -m src.routing_accident_test --preset langkiwa
+  python -m src.routing_accident_test --mode all --lat 14.2989841 --lon 121.0597082
+  python -m src.routing_accident_test --mode all 14.2989841 121.0597082
   python -m src.routing_accident_test --mode geocode --lat 14.3331 --lon 121.0854
-  python -m src.routing_accident_test --mode all --preset langkiwa
+  python -m src.routing_accident_test --preset langkiwa
 """
 
 from __future__ import annotations
@@ -31,6 +31,39 @@ PRESETS: dict[str, tuple[float, float, str]] = {
 }
 
 MODES = ("geocode", "polygon", "centroid", "coordinates", "auto")
+
+
+def _resolve_coordinates(
+    ap: argparse.ArgumentParser,
+    *,
+    preset: str | None,
+    lat: float | None,
+    lon: float | None,
+    positional: list[float],
+) -> tuple[float, float, str | None]:
+    """Return (lat, lon, optional header note). Precedence: --lat/--lon, positional LAT LON, --preset, default."""
+    if lat is not None or lon is not None:
+        if lat is None or lon is None:
+            ap.error("--lat and --lon must be given together")
+        if preset:
+            ap.error("Use either --preset or --lat/--lon, not both")
+        if positional:
+            ap.error("Use either trailing LAT LON or --lat/--lon, not both")
+        return float(lat), float(lon), None
+
+    if positional:
+        if len(positional) != 2:
+            ap.error("trailing coordinates must be exactly LAT and LON (two numbers)")
+        if preset:
+            ap.error("Use either --preset or trailing LAT LON, not both")
+        return float(positional[0]), float(positional[1]), None
+
+    if preset:
+        plat, plon, note = PRESETS[preset]
+        return plat, plon, f"Preset: {preset} — {note}"
+
+    plat, plon, note = PRESETS["langkiwa"]
+    return plat, plon, f"Default preset: langkiwa — {note}"
 
 
 def _print_mode_result(lat: float, lon: float, mode: str) -> None:
@@ -66,18 +99,26 @@ def main() -> int:
         help="Resolver to exercise (default: all modes for comparison)",
     )
     ap.add_argument("--preset", choices=sorted(PRESETS.keys()), help="Named test coordinates")
-    ap.add_argument("--lat", type=float, help="Latitude (WGS84)")
-    ap.add_argument("--lon", type=float, help="Longitude (WGS84)")
+    ap.add_argument("--lat", type=float, metavar="LAT", help="Latitude (WGS84); requires --lon")
+    ap.add_argument("--lon", type=float, metavar="LON", help="Longitude (WGS84); requires --lat")
+    ap.add_argument(
+        "coords",
+        nargs="*",
+        type=float,
+        metavar=("LAT", "LON"),
+        help="Optional trailing LAT LON (e.g. --mode all 14.2989841 121.0597082)",
+    )
     args = ap.parse_args()
 
-    if args.preset:
-        lat, lon, note = PRESETS[args.preset]
-        print(f"Preset: {args.preset} — {note}\n")
-    elif args.lat is not None and args.lon is not None:
-        lat, lon = float(args.lat), float(args.lon)
-    else:
-        lat, lon, note = PRESETS["langkiwa"]
-        print(f"Default preset: langkiwa — {note}\n")
+    lat, lon, note = _resolve_coordinates(
+        ap,
+        preset=args.preset,
+        lat=args.lat,
+        lon=args.lon,
+        positional=list(args.coords),
+    )
+    if note:
+        print(f"{note}\n")
 
     _print_context(lat, lon)
 
