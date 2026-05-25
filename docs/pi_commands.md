@@ -10,10 +10,21 @@ Run these from a terminal on the Pi. **Use the same Python you installed depende
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y libgeos-dev
+sudo apt-get install -y libgeos-dev unzip wget
 ```
 
 Then reinstall Python deps in your venv: `pip install -r requirements.txt`
+
+Offline voice cancel uses Vosk. Download the small English model once:
+
+```bash
+cd ~/AccidentAlertSystem
+source .venv/bin/activate
+pip install -r requirements.txt
+mkdir -p models
+wget -O /tmp/vosk-model-small-en-us-0.15.zip https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+unzip /tmp/vosk-model-small-en-us-0.15.zip -d models/
+```
 
 ---
 
@@ -117,8 +128,8 @@ python -m src.buzzer_silence --verify           # Print current GPIO state
 
 # Microphone / voice cancel
 python -m src.mic_test --baseline               # Measure ambient noise; suggests threshold values
-python -m src.mic_test --keyword-test --keyword cancel  # Test Google STT keyword detection
-python -m src.mic_stt_oneshot                   # One-shot STT: checks flac, internet, mic, transcription
+python -m src.mic_test --keyword-test --keyword cancel  # Test keyword detection (Vosk offline if model exists)
+python -m src.mic_stt_oneshot                   # One-shot Google STT fallback check
 ```
 
 - **`--core-flow-only`**: init + sensor monitoring / threshold / validation; logs core-flow impact events and skips alert action.
@@ -128,7 +139,7 @@ python -m src.mic_stt_oneshot                   # One-shot STT: checks flac, int
 - **`python -m src.audio_test --track 1`**: play DFPlayer track 1 (`mp3/0001.mp3` layout). Use `--probe-range N` to test multiple tracks.
 - **`python -m src.mp3_diag`**: full **MP3-TF-16P** bench (reset 0x0C, TF select, volume, queries, `play_track`, optional `01/001` fallback). Same as `python -m src.audio_test --mp3tf16p-diag`.
 - **`python -m src.mic_test --baseline`**: measures ambient mic noise; prints `Suggested VOICE_SOUND_RMS_THRESHOLD` and `Suggested VOICE_KEYWORD_MIN_RMS` — update `config.py` with those values.
-- **`python -m src.mic_stt_oneshot`**: quick end-to-end check for speech recognition (verifies `flac` install, internet, mic, and transcription).
+- **`python -m src.mic_stt_oneshot`**: quick end-to-end check for Google fallback speech recognition (verifies `flac` install, internet, mic, and transcription).
 - **`python -m src.mpu_collision_test`**: isolated MPU tap/collision JSONL test (see `--help`).
 
 ---

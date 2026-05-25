@@ -5,15 +5,21 @@ Shared microphone + keyword recognition helpers for cancel window and bench test
 from __future__ import annotations
 
 import audioop
+import json
 import threading
 import time
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Callable
 
 from src.config import (
+    PROJECT_ROOT,
     VOICE_AMBIENT_CALIBRATION_SEC,
+    VOICE_KEYWORD_ENGINE,
     VOICE_KEYWORD_MIN_RMS,
     VOICE_KEYWORD_PHRASE_SEC,
+    VOICE_VOSK_MODEL_DIR,
     VOICE_SOUND_CHUNK_SIZE,
     VOICE_SOUND_SAMPLE_RATE,
 )
@@ -31,7 +37,7 @@ class KeywordListenResult:
 
 @dataclass
 class VoiceKeywordSession:
-    """Calibrated SpeechRecognition session for keyword cancel / bench tests."""
+    """Calibrated microphone session for keyword cancel / bench tests."""
 
     recognizer: Any
     microphone: Any
@@ -39,6 +45,9 @@ class VoiceKeywordSession:
     device_index: int | None
     device_name: str = ""
     energy_threshold: float = 0.0
+    engine: str = "google"
+    engine_reason: str = ""
+    vosk_model: Any = None
     stop_background: Callable[..., Any] | None = None
     _cancel_event: threading.Event = field(default_factory=threading.Event)
     _last_heard: str = ""
@@ -62,6 +71,71 @@ def list_microphone_names() -> list[str]:
     import speech_recognition as sr
 
     return list(sr.Microphone.list_microphone_names())
+
+
+def _resolve_vosk_model_path() -> Path:
+    path = Path(VOICE_VOSK_MODEL_DIR)
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    return path
+
+
+@lru_cache(maxsize=1)
+def _load_vosk_model() -> Any | None:
+    """Load the offline Vosk model once per process; return None if unavailable."""
+    model_path = _resolve_vosk_model_path()
+    if not model_path.exists():
+        return None
+    try:
+        import vosk
+
+        vosk.SetLogLevel(-1)
+        return vosk.Model(str(model_path))
+    except Exception:
+        return None
+
+
+def _select_keyword_engine() -> tuple[str, str, Any | None]:
+    """
+    Pick keyword engine from config.
+
+    auto: prefer offline Vosk if model/import are available, else Google STT.
+    vosk: require Vosk; if unavailable, the keyword path is disabled.
+    google: always use SpeechRecognition's Google recognizer.
+    """
+    requested = str(VOICE_KEYWORD_ENGINE or "auto").strip().lower()
+    if requested not in {"auto", "vosk", "google"}:
+        requested = "auto"
+
+    if requested in {"auto", "vosk"}:
+        model = _load_vosk_model()
+        if model is not None:
+            return "vosk", f"offline model={_resolve_vosk_model_path()}", model
+        if requested == "vosk":
+            return "unavailable", f"vosk model missing/unavailable: {_resolve_vosk_model_path()}", None
+    return "google", "Google STT fallback (internet required)", None
+
+
+def _recognize_vosk(raw_16k_s16le: bytes, model: Any, keyword: str) -> str:
+    """Run Vosk on one captured phrase and return normalized text."""
+    import vosk
+
+    grammar = json.dumps([keyword, "[unk]"])
+    recognizer = vosk.KaldiRecognizer(model, 16000, grammar)
+    recognizer.SetWords(False)
+    if recognizer.AcceptWaveform(raw_16k_s16le):
+        payload = recognizer.Result()
+    else:
+        payload = recognizer.FinalResult()
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return ""
+    return str(data.get("text", "")).strip().lower()
+
+
+def _keyword_in_text(keyword: str, text: str) -> bool:
+    return keyword.strip().lower() in text.strip().lower().split()
 
 
 def open_keyword_session(
@@ -101,6 +175,10 @@ def open_keyword_session(
         with mic as source:
             recognizer.adjust_for_ambient_noise(source, duration=ambient)
         energy = float(getattr(recognizer, "energy_threshold", 0.0))
+        engine, engine_reason, vosk_model = _select_keyword_engine()
+        if engine == "unavailable":
+            print(f"Voice keyword cancel unavailable: {engine_reason}")
+            return None
         return VoiceKeywordSession(
             recognizer=recognizer,
             microphone=mic,
@@ -108,6 +186,9 @@ def open_keyword_session(
             device_index=idx,
             device_name=dev_name,
             energy_threshold=energy,
+            engine=engine,
+            engine_reason=engine_reason,
+            vosk_model=vosk_model,
         )
     except Exception:
         return None
@@ -141,15 +222,24 @@ def start_background_keyword_listen(session: VoiceKeywordSession) -> bool:
             return
 
         try:
-            heard = recognizer.recognize_google(audio).strip().lower()
+            if session.engine == "vosk":
+                if session.vosk_model is None:
+                    session._last_error = "unavailable"
+                    return
+                heard = _recognize_vosk(raw, session.vosk_model, keyword)
+                if not heard:
+                    session._last_error = "unknown"
+                    return
+            else:
+                heard = recognizer.recognize_google(audio).strip().lower()
         except Exception as e:
             session._last_error = classify_recognition_error(e)
             return
 
         session._last_heard = heard
         session._last_error = ""
-        print(f"[Mic] Heard: {heard!r} (RMS={rms})")
-        if keyword in heard:
+        print(f"[Mic] Heard: {heard!r} (engine={session.engine}, RMS={rms})")
+        if _keyword_in_text(keyword, heard):
             session._cancel_event.set()
 
     try:
@@ -212,11 +302,18 @@ def listen_once(
         return KeywordListenResult(rms=rms, reason="too_quiet")
 
     try:
-        heard = session.recognizer.recognize_google(audio).strip().lower()
+        if session.engine == "vosk":
+            if session.vosk_model is None:
+                return KeywordListenResult(rms=rms, reason="unavailable")
+            heard = _recognize_vosk(raw, session.vosk_model, session.keyword)
+            if not heard:
+                return KeywordListenResult(rms=rms, reason="unknown")
+        else:
+            heard = session.recognizer.recognize_google(audio).strip().lower()
     except Exception as e:
         return KeywordListenResult(rms=rms, reason=classify_recognition_error(e))
 
-    matched = session.keyword in heard
+    matched = _keyword_in_text(session.keyword, heard)
     return KeywordListenResult(
         matched=matched,
         heard=heard,

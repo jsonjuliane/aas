@@ -2,7 +2,7 @@
 
 ## Overview
 
-During the 10-second countdown, saying **"cancel"** (or a configured keyword) into a USB microphone aborts the alert. The system uses Google Speech-to-Text via the `SpeechRecognition` library.
+During the 10-second countdown, saying **"cancel"** into a USB microphone aborts the alert. The system prefers offline Vosk keyword recognition when the local model is installed; otherwise `VOICE_KEYWORD_ENGINE="auto"` falls back to Google Speech-to-Text via `SpeechRecognition`.
 
 Voice cancel runs **in parallel** with the GPIO button; whichever fires first wins.
 
@@ -13,10 +13,12 @@ Voice cancel runs **in parallel** with the GPIO button; whichever fires first wi
 | Requirement | Detail |
 |-------------|--------|
 | USB microphone | Any USB Audio Device recognised by ALSA (e.g. USB dongle mic) |
-| Internet | Google STT sends audio to Google's servers for transcription |
-| `flac` | OS-level dependency; install once: `sudo apt install -y flac` |
+| Vosk model | Offline model directory, default `models/vosk-model-small-en-us-0.15` |
+| Internet | Only needed when Vosk is unavailable and Google fallback is used |
+| `flac` | OS-level dependency for Google fallback; install once: `sudo apt install -y flac` |
 | `SpeechRecognition` | Python package; included in `requirements.txt` |
 | `pyaudio` | Python package; included in `requirements.txt` |
+| `vosk` | Python package; included in `requirements.txt` |
 
 ---
 
@@ -24,7 +26,7 @@ Voice cancel runs **in parallel** with the GPIO button; whichever fires first wi
 
 1. At the start of each alert, `voice_cancel.open_keyword_session()` opens the microphone and calibrates ambient noise for `VOICE_AMBIENT_CALIBRATION_SEC` seconds.
 2. `voice_cancel.start_background_keyword_listen()` spawns a background thread that continuously listens for speech above `VOICE_KEYWORD_MIN_RMS`.
-3. Each captured utterance is sent to Google STT. If the transcript contains the keyword, `session.cancel_requested` is set to `True`.
+3. Each captured utterance is recognized by Vosk offline when available; otherwise Google STT is used in `auto` mode. If the transcript contains `cancel`, `session.cancel_requested` is set to `True`.
 4. `main.py` checks `session.cancel_requested` each second of the countdown window.
 5. On keyword match — or on countdown timeout — `voice_cancel.close_keyword_session()` stops the listener and releases the mic.
 
@@ -36,10 +38,23 @@ Voice cancel runs **in parallel** with the GPIO button; whichever fires first wi
 |----------|---------|-------------|
 | `VOICE_CANCEL_KEYWORD_ENABLED` | `True` | Enable voice keyword cancel |
 | `VOICE_CANCEL_SOUND_ENABLED` | `False` | Enable RMS-level cancel (loud noise = cancel) |
-| `VOICE_KEYWORD_MIN_RMS` | `6500` | Skip STT for frames quieter than this (reduces cloud calls on idle) |
+| `VOICE_KEYWORD_ENGINE` | `auto` | `auto` prefers Vosk, then Google; `vosk` disables cloud fallback; `google` uses Google only |
+| `VOICE_VOSK_MODEL_DIR` | `models/vosk-model-small-en-us-0.15` | Local offline Vosk model path |
+| `VOICE_KEYWORD_MIN_RMS` | `6500` | Skip recognition for frames quieter than this |
 | `VOICE_SOUND_RMS_THRESHOLD` | `10000` | RMS threshold for sound-level cancel |
 | `VOICE_KEYWORD_PHRASE_SEC` | `2.0` | Max seconds per STT utterance |
 | `VOICE_AMBIENT_CALIBRATION_SEC` | `1.0` | Ambient noise calibration duration |
+
+### Install Vosk model on Pi
+
+```bash
+cd ~/AccidentAlertSystem
+source .venv/bin/activate
+pip install -r requirements.txt
+mkdir -p models
+wget -O /tmp/vosk-model-small-en-us-0.15.zip https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+unzip /tmp/vosk-model-small-en-us-0.15.zip -d models/
+```
 
 ### Tuning thresholds
 
@@ -59,10 +74,10 @@ This prints `Suggested VOICE_SOUND_RMS_THRESHOLD` and `Suggested VOICE_KEYWORD_M
 # Ambient noise baseline + threshold suggestions
 python -m src.mic_test --baseline
 
-# 15-second live keyword detection test
+# 15-second live keyword detection test (prints engine=vosk when model is active)
 python -m src.mic_test --keyword-test --keyword cancel
 
-# One-shot STT check: flac, internet, mic, transcription
+# One-shot Google STT check: flac, internet, mic, transcription
 python -m src.mic_stt_oneshot
 
 # Full alert cycle (test voice cancel end-to-end)
@@ -75,7 +90,8 @@ python -m src.main --test-alert
 
 | Symptom | Fix |
 |---------|-----|
-| `recognition error` | Install `flac`: `sudo apt install -y flac` |
+| `engine=google` when expecting offline | Check that `models/vosk-model-small-en-us-0.15` exists and `vosk` is installed |
+| `recognition error` with Google fallback | Install `flac`: `sudo apt install -y flac` |
 | `SpeechRecognition not installed` | `pip install SpeechRecognition` |
 | Keyword never matched | Run `--baseline`; ensure speech RMS exceeds `VOICE_KEYWORD_MIN_RMS` |
 | Constant `[Mic] Sound detected` without speech | Lower `VOICE_SOUND_RMS_THRESHOLD` or increase mic distance from noise source |

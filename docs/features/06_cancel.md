@@ -5,7 +5,7 @@
 During the **10-second countdown**, the rider can cancel the alert to prevent a false alarm using either:
 
 1. **GPIO button** (physical cancel) — GPIO 17, active-low
-2. **Voice keyword** ("cancel") — Google STT via USB microphone; requires internet
+2. **Voice keyword** ("cancel") — Vosk offline via USB microphone when the model is installed; Google STT fallback in `auto` mode
 
 If neither cancels within the window, the system proceeds to send SMS.  
 After the alert cycle completes (send or cancel), the process exits.
@@ -27,7 +27,7 @@ After the alert cycle completes (send or cancel), the process exits.
 |------|-------|
 | Mic | USB Audio Device (e.g. USB dongle mic) |
 | Keyword | "cancel" (configurable via `--voice-cancel-keyword`) |
-| Requires | Internet connection for Google STT; `flac` system package |
+| Requires | Vosk model for offline mode; internet + `flac` only for Google fallback |
 
 ---
 
@@ -64,7 +64,7 @@ python -m src.mic_test --baseline
 # Test "cancel" keyword detection (15-second window)
 python -m src.mic_test --keyword-test --keyword cancel
 
-# One-shot Google STT check (flac + internet + mic)
+# One-shot Google STT fallback check (flac + internet + mic)
 python -m src.mic_stt_oneshot
 ```
 
@@ -76,9 +76,10 @@ python -m src.mic_stt_oneshot
 |----------|---------|---------|
 | `CANCEL_BUTTON_GPIO` | `17` | BCM GPIO for cancel button |
 | `COUNTDOWN_SECONDS` | `10` | Alert cancel window duration |
-| `VOICE_CANCEL_KEYWORD_ENABLED` | `True` | Enable Google STT keyword cancel |
+| `VOICE_CANCEL_KEYWORD_ENABLED` | `True` | Enable keyword cancel |
+| `VOICE_KEYWORD_ENGINE` | `auto` | Prefer Vosk offline, fallback to Google |
 | `VOICE_CANCEL_SOUND_ENABLED` | `False` | Enable RMS-level cancel (louder than threshold) |
-| `VOICE_KEYWORD_MIN_RMS` | `6500` | Minimum RMS to attempt STT (skip quiet frames) |
+| `VOICE_KEYWORD_MIN_RMS` | `6500` | Minimum RMS to attempt recognition (skip quiet frames) |
 | `VOICE_KEYWORD_PHRASE_SEC` | `2.0` | Max seconds per utterance |
 | `VOICE_AMBIENT_CALIBRATION_SEC` | `1.0` | Ambient noise calibration time |
 

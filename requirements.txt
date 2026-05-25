@@ -11,6 +11,7 @@ pyserial>=3.5
 # Pi OS also needs: sudo apt install -y flac  (used by recognize_google)
 SpeechRecognition>=3.10.0
 pyaudio>=0.2.13
+vosk>=0.3.45
 
 # Geofencing / geometry (Phase 2 — Biñan boundary)
 shapely>=2.0.0

@@ -22,6 +22,7 @@ ENV/
 # Logs / runtime
 logs/
 *.log
+models/
 
 # Secrets / sensitive config (use .example as template)
 .env

@@ -13,7 +13,7 @@ This document describes the Phase 1 codebase and how to run it.
 | GSM | `src/gsm_sim800l.py` | SIM800L `send_sms_detailed()` with retry logic |
 | Audio | `src/audio_mp3.py` | DFPlayer `play_track()` (reserved for future use) |
 | Cancel (button) | `src/cancel.py` | GPIO button `wait_for_cancel()` — GPIO 17, active-low |
-| Cancel (voice) | `src/voice_cancel.py` | Background Google STT keyword listener ("cancel") |
+| Cancel (voice) | `src/voice_cancel.py` | Background keyword listener ("cancel"); Vosk offline first, Google fallback |
 | Buzzer | `src/buzzer_hw.py` | Countdown tick beeps on GPIO 18 |
 | Contacts | `src/contacts.py` | Load family contacts, format message |
 | Logging | `src/logging_store.py` | `log_event()` |
@@ -36,7 +36,7 @@ This document describes the Phase 1 codebase and how to run it.
 | Audio bench test | `python -m src.audio_test --track 1` | Play DFPlayer track 1; use `--probe-range N` to find audible tracks |
 | MPU isolated test | `python -m src.mpu_collision_test` | Tap/collision test; JSONL defaults to events + summary (`--log-all-samples` for verbose) |
 | Mic baseline | `python -m src.mic_test --baseline` | Measure ambient noise; output suggested RMS threshold values |
-| Mic keyword test | `python -m src.mic_test --keyword-test --keyword cancel` | Test Google STT keyword detection |
+| Mic keyword test | `python -m src.mic_test --keyword-test --keyword cancel` | Test keyword detection (prints engine) |
 | STT one-shot | `python -m src.mic_stt_oneshot` | Verify flac, internet, mic, transcription end-to-end |
 | Buzzer diagnostics | `python -m src.buzzer_diag` | Interactive buzzer polarity scan and GPIO sweep |
 | Buzzer silence | `python -m src.buzzer_silence` | Immediately silence buzzer GPIO (also run by boot service) |

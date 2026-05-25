@@ -105,6 +105,7 @@ def _voice_cancel_capabilities_payload(ctx: VoiceCancelContext) -> dict[str, obj
         "sound_level_cancel": bool(ctx.sound_ok),
         "keyword_cancel_configured": bool(VOICE_CANCEL_KEYWORD_ENABLED),
         "keyword_cancel_ready": bool(ctx.speech_ok),
+        "keyword_engine": ctx.keyword_session.engine if ctx.keyword_session is not None else None,
         "any_mic_active": bool(
             ctx.sound_ok or (VOICE_CANCEL_KEYWORD_ENABLED and ctx.speech_ok)
         ),
@@ -214,8 +215,9 @@ def _prepare_voice_cancel(
             ctx.selected_device_index = session.device_index
             print(
                 f"Voice keyword cancel enabled (keyword='{keyword}', "
+                f"engine={session.engine}, "
                 f"mic_index={ctx.selected_device_index}, mic='{selected_voice_device_name}', "
-                f"energy_threshold={session.energy_threshold:.0f})."
+                f"energy_threshold={session.energy_threshold:.0f}; {session.engine_reason})."
             )
         else:
             print("Voice keyword cancel unavailable (mic open or SpeechRecognition failed).")
@@ -695,7 +697,7 @@ def _wait_for_cancel_window(
         if keyword_bg_started:
             print(
                 f"[Mic] Background keyword listener active "
-                f"(say '{keyword}' clearly; needs internet for Google STT)."
+                f"(say '{keyword}' clearly; engine={voice_ctx.keyword_session.engine})."
             )
         else:
             print("[Mic] Background keyword listener failed to start (button cancel still works).")

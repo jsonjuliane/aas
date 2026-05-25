@@ -110,7 +110,7 @@ def _run_keyword_test(
     *,
     verbose: bool,
 ) -> int:
-    print(f"[Mic] Keyword test for {duration_sec:.0f}s (say '{keyword}' clearly; needs internet)...")
+    print(f"[Mic] Keyword test for {duration_sec:.0f}s (say '{keyword}' clearly)...")
     with _suppress_native_stderr():
         session = voice_cancel.open_keyword_session(
             device_index=device_index,
@@ -122,7 +122,8 @@ def _run_keyword_test(
 
     print(
         f"[OK] Mic open: index={session.device_index} name={session.device_name!r} "
-        f"energy_threshold={session.energy_threshold:.0f}"
+        f"energy_threshold={session.energy_threshold:.0f} "
+        f"engine={session.engine} ({session.engine_reason})"
     )
 
     deadline = time.monotonic() + max(1.0, duration_sec)
