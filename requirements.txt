@@ -15,6 +15,8 @@ pyaudio>=0.2.13
 # These official v0.3.45 wheels are selected by CPU architecture when supported.
 vosk @ https://github.com/alphacep/vosk-api/releases/download/v0.3.45/vosk-0.3.45-py3-none-manylinux2014_aarch64.whl ; platform_machine == "aarch64"
 vosk @ https://github.com/alphacep/vosk-api/releases/download/v0.3.45/vosk-0.3.45-py3-none-linux_armv7l.whl ; platform_machine == "armv7l"
+# armv6l Pi fallback for offline keyword cancel.
+pocketsphinx>=5.0.0
 
 # Geofencing / geometry (Phase 2 — Biñan boundary)
 shapely>=2.0.0

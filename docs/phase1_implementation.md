@@ -13,7 +13,7 @@ This document describes the Phase 1 codebase and how to run it.
 | GSM | `src/gsm_sim800l.py` | SIM800L `send_sms_detailed()` with retry logic |
 | Audio | `src/audio_mp3.py` | DFPlayer `play_track()` (reserved for future use) |
 | Cancel (button) | `src/cancel.py` | GPIO button `wait_for_cancel()` — GPIO 17, active-low |
-| Cancel (voice) | `src/voice_cancel.py` | Background keyword listener ("cancel"); Vosk offline first, Google fallback |
+| Cancel (voice) | `src/voice_cancel.py` | Background keyword listener ("cancel"); Vosk offline first, PocketSphinx fallback, Google fallback |
 | Buzzer | `src/buzzer_hw.py` | Countdown tick beeps on GPIO 18 |
 | Contacts | `src/contacts.py` | Load family contacts, format message |
 | Logging | `src/logging_store.py` | `log_event()` |

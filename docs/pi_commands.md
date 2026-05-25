@@ -15,7 +15,7 @@ sudo apt-get install -y libgeos-dev unzip wget
 
 Then reinstall Python deps in your venv: `pip install -r requirements.txt`
 
-Offline voice cancel uses Vosk. Download the small English model once:
+Offline voice cancel prefers Vosk where supported. Download the small English model once:
 
 ```bash
 cd ~/AccidentAlertSystem
@@ -27,6 +27,17 @@ unzip /tmp/vosk-model-small-en-us-0.15.zip -d models/
 ```
 
 Do **not** use `pip install vosk` on Pi if it says no matching distribution. `requirements.txt` uses the official Vosk v0.3.45 `aarch64` / `armv7l` wheels directly.
+
+On `armv6l`, Vosk wheels are unavailable; use PocketSphinx:
+
+```bash
+source .venv/bin/activate
+pip install pocketsphinx
+python - <<'PY'
+import pocketsphinx
+print("pocketsphinx OK")
+PY
+```
 
 ---
 
@@ -130,7 +141,7 @@ python -m src.buzzer_silence --verify           # Print current GPIO state
 
 # Microphone / voice cancel
 python -m src.mic_test --baseline               # Measure ambient noise; suggests threshold values
-python -m src.mic_test --keyword-test --keyword cancel  # Test keyword detection (Vosk offline if model exists)
+python -m src.mic_test --keyword-test --keyword cancel  # Test keyword detection (prints engine)
 python -m src.mic_stt_oneshot                   # One-shot Google STT fallback check
 ```
 

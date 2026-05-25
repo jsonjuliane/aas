@@ -95,16 +95,28 @@ def _load_vosk_model() -> Any | None:
         return None
 
 
+@lru_cache(maxsize=1)
+def _pocketsphinx_available() -> bool:
+    """Return True when SpeechRecognition can use PocketSphinx bindings."""
+    try:
+        import pocketsphinx  # noqa: F401
+
+        return True
+    except Exception:
+        return False
+
+
 def _select_keyword_engine() -> tuple[str, str, Any | None]:
     """
     Pick keyword engine from config.
 
-    auto: prefer offline Vosk if model/import are available, else Google STT.
+    auto: prefer offline Vosk, then PocketSphinx, else Google STT.
     vosk: require Vosk; if unavailable, the keyword path is disabled.
+    pocketsphinx: require PocketSphinx; if unavailable, the keyword path is disabled.
     google: always use SpeechRecognition's Google recognizer.
     """
     requested = str(VOICE_KEYWORD_ENGINE or "auto").strip().lower()
-    if requested not in {"auto", "vosk", "google"}:
+    if requested not in {"auto", "vosk", "pocketsphinx", "google"}:
         requested = "auto"
 
     if requested in {"auto", "vosk"}:
@@ -113,6 +125,11 @@ def _select_keyword_engine() -> tuple[str, str, Any | None]:
             return "vosk", f"offline model={_resolve_vosk_model_path()}", model
         if requested == "vosk":
             return "unavailable", f"vosk model missing/unavailable: {_resolve_vosk_model_path()}", None
+    if requested in {"auto", "pocketsphinx"}:
+        if _pocketsphinx_available():
+            return "pocketsphinx", "offline PocketSphinx keyword recognizer", None
+        if requested == "pocketsphinx":
+            return "unavailable", "pocketsphinx package unavailable", None
     return "google", "Google STT fallback (internet required)", None
 
 
@@ -132,6 +149,21 @@ def _recognize_vosk(raw_16k_s16le: bytes, model: Any, keyword: str) -> str:
     except json.JSONDecodeError:
         return ""
     return str(data.get("text", "")).strip().lower()
+
+
+def _recognize_pocketsphinx(recognizer: Any, audio: Any, keyword: str) -> str:
+    """
+    Recognize a single keyword with PocketSphinx.
+
+    SpeechRecognition's keyword_entries keeps this offline path focused on
+    "cancel" instead of trying full free-form transcription.
+    """
+    return str(
+        recognizer.recognize_sphinx(
+            audio,
+            keyword_entries=[(keyword, 1.0)],
+        )
+    ).strip().lower()
 
 
 def _keyword_in_text(keyword: str, text: str) -> bool:
@@ -230,6 +262,11 @@ def start_background_keyword_listen(session: VoiceKeywordSession) -> bool:
                 if not heard:
                     session._last_error = "unknown"
                     return
+            elif session.engine == "pocketsphinx":
+                heard = _recognize_pocketsphinx(recognizer, audio, keyword)
+                if not heard:
+                    session._last_error = "unknown"
+                    return
             else:
                 heard = recognizer.recognize_google(audio).strip().lower()
         except Exception as e:
@@ -306,6 +343,10 @@ def listen_once(
             if session.vosk_model is None:
                 return KeywordListenResult(rms=rms, reason="unavailable")
             heard = _recognize_vosk(raw, session.vosk_model, session.keyword)
+            if not heard:
+                return KeywordListenResult(rms=rms, reason="unknown")
+        elif session.engine == "pocketsphinx":
+            heard = _recognize_pocketsphinx(session.recognizer, audio, session.keyword)
             if not heard:
                 return KeywordListenResult(rms=rms, reason="unknown")
         else:
