@@ -11,7 +11,10 @@ pyserial>=3.5
 # Pi OS also needs: sudo apt install -y flac  (used by recognize_google)
 SpeechRecognition>=3.10.0
 pyaudio>=0.2.13
-vosk>=0.3.45
+# Vosk wheels are not always discoverable from PyPI/piwheels on Raspberry Pi.
+# These official v0.3.45 wheels are selected by CPU architecture when supported.
+vosk @ https://github.com/alphacep/vosk-api/releases/download/v0.3.45/vosk-0.3.45-py3-none-manylinux2014_aarch64.whl ; platform_machine == "aarch64"
+vosk @ https://github.com/alphacep/vosk-api/releases/download/v0.3.45/vosk-0.3.45-py3-none-linux_armv7l.whl ; platform_machine == "armv7l"
 
 # Geofencing / geometry (Phase 2 — Biñan boundary)
 shapely>=2.0.0

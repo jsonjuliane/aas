@@ -56,6 +56,8 @@ wget -O /tmp/vosk-model-small-en-us-0.15.zip https://alphacephei.com/vosk/models
 unzip /tmp/vosk-model-small-en-us-0.15.zip -d models/
 ```
 
+If `pip install vosk` says no matching distribution, use `pip install -r requirements.txt` instead. The project requirements reference the official Vosk v0.3.45 wheels for `aarch64` and `armv7l` from the [Vosk release page](https://github.com/alphacep/vosk-api/releases/tag/v0.3.45). A Pi reporting `armv6l` is not covered by those wheels.
+
 ### Tuning thresholds
 
 Run a baseline measurement first:

@@ -26,6 +26,8 @@ wget -O /tmp/vosk-model-small-en-us-0.15.zip https://alphacephei.com/vosk/models
 unzip /tmp/vosk-model-small-en-us-0.15.zip -d models/
 ```
 
+Do **not** use `pip install vosk` on Pi if it says no matching distribution. `requirements.txt` uses the official Vosk v0.3.45 `aarch64` / `armv7l` wheels directly.
+
 ---
 
 ## Project + venv
