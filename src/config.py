@@ -121,8 +121,6 @@ LOGS_DIR = "logs"
 
 # Local phone/app config link PIN used until changed by the linked rider.
 CONFIG_LINK_PIN = "000000"
-# Backup admin PIN that always works for local phone/app config linking.
-CONFIG_ADMIN_PIN = "8018331"
 
 # Phase 2 routing
 CONTACTS_BARANGAY_FILE = "contacts.barangay.json"
