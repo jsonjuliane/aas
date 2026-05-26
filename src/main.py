@@ -42,6 +42,7 @@ from src.config import (
     MP3_DEFAULT_VOLUME,
     VOICE_CANCEL_KEYWORD_ENABLED,
     VOICE_CANCEL_SOUND_ENABLED,
+    VOICE_KEYWORD_RESULT_GRACE_SEC,
     VOICE_SOUND_CHUNK_SIZE,
     VOICE_SOUND_RMS_SUSTAIN_CHUNKS,
     VOICE_SOUND_RMS_THRESHOLD,
@@ -734,6 +735,26 @@ def _wait_for_cancel_window(
         )
         announced_audio_mode = True
 
+    def _wait_for_final_keyword_result(reason: str) -> tuple[bool, str] | None:
+        """Let offline keyword decoding finish if speech landed near the timeout."""
+        if not keyword_bg_started or voice_ctx.keyword_session is None:
+            return None
+        if voice_ctx.keyword_session.cancel_requested:
+            return True, "voice_cancel"
+        grace_sec = max(0.0, float(VOICE_KEYWORD_RESULT_GRACE_SEC))
+        if grace_sec <= 0:
+            return None
+        print(
+            f"[Mic] Cancel window ended ({reason}); waiting up to {grace_sec:.1f}s "
+            "for final keyword recognition..."
+        )
+        deadline = time.monotonic() + grace_sec
+        while time.monotonic() < deadline:
+            if voice_ctx.keyword_session.cancel_requested:
+                return True, "voice_cancel"
+            time.sleep(0.05)
+        return None
+
     try:
         while time.monotonic() < t_hard_end:
             # GPIO/button cancel path
@@ -781,10 +802,19 @@ def _wait_for_cancel_window(
 
                 if playback_feedback_known:
                     if playback_done:
+                        final_keyword = _wait_for_final_keyword_result("audio_finished")
+                        if final_keyword is not None:
+                            return final_keyword
                         return False, "audio_finished"
                 elif now >= t_fallback_end:
+                    final_keyword = _wait_for_final_keyword_result("timeout_fallback")
+                    if final_keyword is not None:
+                        return final_keyword
                     return False, "timeout_fallback"
             elif now >= t_fallback_end:
+                final_keyword = _wait_for_final_keyword_result("timeout_fallback")
+                if final_keyword is not None:
+                    return final_keyword
                 return False, "timeout_fallback"
             time.sleep(0.02)
 

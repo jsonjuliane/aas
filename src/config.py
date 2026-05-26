@@ -99,6 +99,7 @@ VOICE_VOSK_MODEL_DIR = "models/vosk-model-small-en-us-0.15"
 VOICE_AMBIENT_CALIBRATION_SEC = 3.0  # calibrate before the cancel countdown starts
 VOICE_KEYWORD_PHRASE_SEC = 3.0  # max seconds per utterance ("cancel")
 VOICE_KEYWORD_MIN_RMS = 900  # skip keyword recognition below this; tune with mic_test --sphinx-oneshot
+VOICE_KEYWORD_RESULT_GRACE_SEC = 5.0  # allow offline decoder to finish after speech near timeout
 GPS_COLLISION_FIX_TIMEOUT_SEC = 8.0
 GSM_WAIT_REGISTER_SEC = 30.0  # Max wait for network registration before SMS send
 GSM_WAIT_POLL_SEC = 2.0  # Poll interval while waiting for GSM readiness
