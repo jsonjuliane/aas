@@ -5,6 +5,7 @@ Modes:
   python -m src.mic_test                    # RMS monitor (logs on level changes)
   python -m src.mic_test --baseline        # measure idle noise + suggest threshold
   python -m src.mic_test --keyword-test    # keyword recognition loop (like main)
+  python -m src.mic_test --sphinx-oneshot  # one-shot PocketSphinx transcription
   python -m src.mic_test --record out.wav  # save a short WAV sample
 
 Run on Raspberry Pi (venv active).
@@ -156,6 +157,84 @@ def _run_keyword_test(
     return 0 if matches > 0 else 1
 
 
+def _run_sphinx_oneshot(
+    device_index: int | None,
+    keyword: str,
+    ambient_sec: float,
+    timeout_sec: float,
+    phrase_sec: float,
+) -> int:
+    try:
+        import speech_recognition as sr
+    except ImportError:
+        print("[FAIL] SpeechRecognition is not installed.")
+        return 1
+
+    try:
+        import pocketsphinx  # noqa: F401
+    except ImportError:
+        print("[FAIL] PocketSphinx is not installed. Try: pip install pocketsphinx")
+        return 1
+
+    recognizer = sr.Recognizer()
+    recognizer.dynamic_energy_threshold = True
+    recognizer.pause_threshold = 0.6
+    recognizer.phrase_threshold = 0.25
+
+    try:
+        mic = sr.Microphone(device_index=device_index, sample_rate=16000)
+        with mic as source:
+            print(f"[Mic] Adjusting for background noise for {ambient_sec:.1f}s...")
+            recognizer.adjust_for_ambient_noise(source, duration=max(0.3, ambient_sec))
+            print(
+                f"[OK] Mic ready: energy_threshold={recognizer.energy_threshold:.0f}. "
+                f"Say '{keyword}' clearly."
+            )
+            audio = recognizer.listen(
+                source,
+                timeout=max(0.1, timeout_sec),
+                phrase_time_limit=max(0.8, phrase_sec),
+            )
+    except sr.WaitTimeoutError:
+        print("[FAIL] Listening timed out; no speech detected.")
+        return 1
+    except Exception as e:
+        print(f"[FAIL] Could not capture microphone audio: {e}")
+        return 1
+
+    try:
+        raw = audio.get_raw_data(convert_rate=16000, convert_width=2)
+        rms = int(audioop.rms(raw, 2)) if raw else 0
+    except Exception:
+        rms = 0
+    print(f"[Mic] Captured audio RMS={rms}")
+
+    try:
+        text = recognizer.recognize_sphinx(audio).strip().lower()
+        print(f"[OK] PocketSphinx free-form heard: {text!r}")
+    except sr.UnknownValueError:
+        text = ""
+        print("[Mic] PocketSphinx free-form could not understand the audio.")
+    except sr.RequestError as e:
+        print(f"[FAIL] PocketSphinx error: {e}")
+        return 1
+
+    try:
+        kw_text = recognizer.recognize_sphinx(
+            audio,
+            keyword_entries=[(keyword.strip().lower(), 1.0)],
+        ).strip().lower()
+        matched = keyword.strip().lower() in kw_text.split()
+        print(f"[OK] PocketSphinx keyword heard: {kw_text!r} matched={matched}")
+        return 0 if matched else 1
+    except sr.UnknownValueError:
+        print("[FAIL] PocketSphinx keyword mode did not hear the keyword.")
+        return 1
+    except sr.RequestError as e:
+        print(f"[FAIL] PocketSphinx keyword error: {e}")
+        return 1
+
+
 def _run_record(device_index: int | None, path: str, duration_sec: float) -> int:
     print(f"[Mic] Recording {duration_sec:.1f}s -> {path}")
     ok = voice_cancel.record_wav(path, device_index=device_index, duration_sec=duration_sec)
@@ -276,11 +355,18 @@ def main() -> int:
     ap.add_argument(
         "--keyword-test",
         action="store_true",
-        help="Test Google keyword recognition (like alert cancel window)",
+        help="Test selected keyword engine (same path as alert cancel window)",
     )
     ap.add_argument("--keyword", type=str, default="cancel")
     ap.add_argument("--keyword-sec", type=float, default=15.0)
     ap.add_argument("--verbose", action="store_true", help="Log quiet/timeouts in keyword-test")
+    ap.add_argument(
+        "--sphinx-oneshot",
+        action="store_true",
+        help="One-shot offline PocketSphinx transcription and keyword check",
+    )
+    ap.add_argument("--sphinx-timeout-sec", type=float, default=5.0)
+    ap.add_argument("--sphinx-phrase-sec", type=float, default=3.0)
     ap.add_argument("--record", type=str, default="", metavar="PATH", help="Record WAV and exit")
     ap.add_argument("--record-sec", type=float, default=5.0)
     ap.add_argument(
@@ -321,6 +407,15 @@ def main() -> int:
             args.keyword,
             args.keyword_sec,
             verbose=bool(args.verbose),
+        )
+
+    if args.sphinx_oneshot:
+        return _run_sphinx_oneshot(
+            dev,
+            args.keyword,
+            args.baseline_sec,
+            args.sphinx_timeout_sec,
+            args.sphinx_phrase_sec,
         )
 
     threshold = int(VOICE_SOUND_RMS_THRESHOLD if args.threshold is None else args.threshold)

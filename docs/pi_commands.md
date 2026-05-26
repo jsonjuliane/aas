@@ -183,6 +183,7 @@ python -m src.buzzer_silence --verify           # Print current GPIO state
 # Microphone / voice cancel
 python -m src.mic_test --baseline               # Measure ambient noise; suggests threshold values
 python -m src.mic_test --keyword-test --keyword cancel  # Test keyword detection (prints engine)
+python -m src.mic_test --sphinx-oneshot --keyword cancel # One-shot offline PocketSphinx check
 python -m src.mic_stt_oneshot                   # One-shot Google STT fallback check
 ```
 
@@ -193,6 +194,7 @@ python -m src.mic_stt_oneshot                   # One-shot Google STT fallback c
 - **`python -m src.audio_test --track 1`**: play DFPlayer track 1 (`mp3/0001.mp3` layout). Use `--probe-range N` to test multiple tracks.
 - **`python -m src.mp3_diag`**: full **MP3-TF-16P** bench (reset 0x0C, TF select, volume, queries, `play_track`, optional `01/001` fallback). Same as `python -m src.audio_test --mp3tf16p-diag`.
 - **`python -m src.mic_test --baseline`**: measures ambient mic noise; prints `Suggested VOICE_SOUND_RMS_THRESHOLD` and `Suggested VOICE_KEYWORD_MIN_RMS` — update `config.py` with those values.
+- **`python -m src.mic_test --sphinx-oneshot --keyword cancel`**: captures one phrase at 16 kHz, prints what PocketSphinx heard, then checks whether the offline keyword mode matched `cancel`.
 - **`python -m src.mic_stt_oneshot`**: quick end-to-end check for Google fallback speech recognition (verifies `flac` install, internet, mic, and transcription).
 - **`python -m src.mpu_collision_test`**: isolated MPU tap/collision JSONL test (see `--help`).
 
