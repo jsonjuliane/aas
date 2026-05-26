@@ -101,7 +101,91 @@ python -m src.contacts_config_protocol '{"op":"update_contact","index":1,"name":
 
 ---
 
-## Bluetooth phone config server
+## BLE GATT phone config server
+
+BLE GATT is the preferred phone-app transport because it works with modern Android/iOS app APIs. It uses the same JSON commands as `contacts_config_protocol`.
+
+Protocol:
+- App scans for local name **`SmartShell`** and service UUID **`f2d00001-8b6b-4d5d-9d53-5e77295c1c01`**
+- App subscribes to TX notify characteristic **`f2d00003-8b6b-4d5d-9d53-5e77295c1c01`**
+- App writes one UTF-8 JSON command ending in newline (`\n`) to RX characteristic **`f2d00002-8b6b-4d5d-9d53-5e77295c1c01`**
+- Pi sends one UTF-8 JSON response ending in newline (`\n`) over TX notifications. Reassemble chunks until newline.
+
+First test the BLE protocol without Bluetooth hardware:
+
+```bash
+cd ~/AccidentAlertSystem
+source .venv/bin/activate
+
+printf '%s\n' '{"op":"get_config"}' | python -m src.ble_config_server --stdio
+printf '%s\n' '{"op":"validate"}' | python -m src.ble_config_server --stdio
+```
+
+Test writes on a copy first:
+
+```bash
+cp config/contacts.family.json /tmp/contacts.family.ble-test.json
+printf '%s\n' '{"op":"set_rider","rider_name":"BLE Test","subject_home_barangay":"Zapote"}' | python -m src.ble_config_server --stdio --path /tmp/contacts.family.ble-test.json
+python -m src.contacts_config_store --path /tmp/contacts.family.ble-test.json get
+rm -f /tmp/contacts.family.ble-test.json /tmp/contacts.family.ble-test.json.bak
+```
+
+Prepare BLE packages on the Pi:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y bluetooth bluez rfkill python3-dbus python3-gi
+sudo systemctl enable --now bluetooth
+sudo rfkill unblock bluetooth
+```
+
+Run diagnostics:
+
+```bash
+python -m src.ble_config_server --diagnose
+```
+
+Expected important lines:
+
+```text
+[OK] python dbus import
+[OK] python gi/GLib import
+[OK] bluetooth service active
+[OK] adapter powered
+[OK] GATT manager available
+[OK] LE advertising manager available
+```
+
+Start the BLE GATT server:
+
+```bash
+python -m src.ble_config_server
+```
+
+If the venv cannot import `dbus` / `gi`, use the system Python on the Pi:
+
+```bash
+/usr/bin/python3 -m src.ble_config_server --diagnose
+/usr/bin/python3 -m src.ble_config_server
+```
+
+If BlueZ rejects advertising with a permission error, run once with sudo while testing:
+
+```bash
+sudo -E /usr/bin/python3 -m src.ble_config_server
+```
+
+Example JSON commands for the app:
+
+```json
+{"op":"get_config"}
+{"op":"update_contact","index":1,"name":"Mom","phone":"09201234567"}
+{"op":"set_rider","rider_name":"Juan Dela Cruz","subject_home_barangay":"Zapote"}
+```
+
+---
+
+## Bluetooth RFCOMM phone config server
 
 The Bluetooth server uses the same JSON commands as `contacts_config_protocol`. It starts with RFCOMM / Serial Port style Bluetooth because it is easy to test from an Android Bluetooth terminal app.
 
@@ -223,6 +307,11 @@ python -m src.routing_accident_test --mode auto --lat 14.2989841 --lon 121.05970
 python -m src.routing_accident_test --no-sms-preview --mode auto --lat 14.3331 --lon 121.0854
 python -m src.routing_matrix_test               # All 7 barangay centroids + outside + no GPS
 python -m src.routing_matrix_test --sms-preview # Same + print SMS body per scenario
+
+# Phone config transport
+python -m src.ble_config_server --diagnose       # Check BLE/BlueZ GATT prerequisites
+python -m src.ble_config_server                  # BLE GATT config server for the app
+python -m src.bluetooth_config_server --channel 1  # Classic Bluetooth RFCOMM fallback/debug server
 
 # Hardware diagnostics
 python -m src.hardware_check                    # Full hardware probe (exit 1 on any FAIL)
