@@ -443,6 +443,68 @@ def listen_once_sphinx_oneshot(
     return KeywordListenResult(matched=matched, heard=heard, rms=rms, reason=reason)
 
 
+def listen_full_window_sphinx(
+    session: VoiceKeywordSession,
+    *,
+    duration_sec: float,
+) -> KeywordListenResult:
+    """
+    Record one full cancel window, then decode it with PocketSphinx.
+
+    This avoids SpeechRecognition's speech-start timeout in the real countdown
+    path. It captures the entire countdown window instead of waiting for a
+    phrase boundary, then uses PocketSphinx keyword mode only.
+    """
+    duration = max(0.2, float(duration_sec))
+
+    try:
+        import pocketsphinx  # noqa: F401
+        import speech_recognition as sr
+    except ImportError:
+        return KeywordListenResult(reason="unavailable")
+
+    try:
+        with session.microphone as source:
+            audio = session.recognizer.record(source, duration=duration)
+    except Exception as e:
+        return KeywordListenResult(reason=classify_recognition_error(e))
+
+    try:
+        raw = audio.get_raw_data(convert_rate=16000, convert_width=2)
+        rms = int(audioop.rms(raw, 2)) if raw else 0
+    except Exception:
+        rms = 0
+
+    heard_keyword = ""
+    try:
+        heard_keyword = (
+            session.recognizer.recognize_sphinx(
+                audio,
+                keyword_entries=[(session.keyword, 1.0)],
+            )
+            .strip()
+            .lower()
+        )
+    except sr.UnknownValueError:
+        heard_keyword = ""
+    except sr.RequestError as e:
+        return KeywordListenResult(rms=rms, reason=classify_recognition_error(e))
+
+    matched = _keyword_in_text(session.keyword, heard_keyword)
+    if matched:
+        reason = "ok"
+    elif heard_keyword:
+        reason = "no_keyword"
+    else:
+        reason = "unknown"
+    return KeywordListenResult(
+        matched=matched,
+        heard=heard_keyword,
+        rms=rms,
+        reason=reason,
+    )
+
+
 def classify_recognition_error(exc: BaseException) -> str:
     """Map SpeechRecognition / request errors to short reason codes."""
     try:

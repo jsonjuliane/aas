@@ -699,10 +699,9 @@ def _wait_for_cancel_window(
         listen_window = max(0.2, timeout_sec)
         with _suppress_native_stderr():
             if session.engine == "pocketsphinx":
-                result = voice_cancel.listen_once_sphinx_oneshot(
+                result = voice_cancel.listen_full_window_sphinx(
                     session,
-                    timeout_sec=listen_window,
-                    phrase_sec=listen_window,
+                    duration_sec=listen_window,
                 )
             else:
                 result = voice_cancel.listen_once(
@@ -737,7 +736,7 @@ def _wait_for_cancel_window(
         keyword_worker_thread.start()
         keyword_bg_started = True
         print(
-            f"[Mic] One-shot keyword listener active for {timeout_sec:.1f}s "
+            f"[Mic] Full-window keyword listener recording for {timeout_sec:.1f}s "
             f"(say '{keyword}' clearly; engine={voice_ctx.keyword_session.engine})."
         )
 
