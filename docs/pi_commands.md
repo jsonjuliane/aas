@@ -101,6 +101,76 @@ python -m src.contacts_config_protocol '{"op":"update_contact","index":1,"name":
 
 ---
 
+## Bluetooth phone config server
+
+The Bluetooth server uses the same JSON commands as `contacts_config_protocol`. It starts with RFCOMM / Serial Port style Bluetooth because it is easy to test from an Android Bluetooth terminal app.
+
+First test the server protocol without Bluetooth hardware:
+
+```bash
+cd ~/AccidentAlertSystem
+source .venv/bin/activate
+
+printf '%s\n' '{"op":"get_config"}' | python -m src.bluetooth_config_server --stdio
+printf '%s\n' '{"op":"validate"}' | python -m src.bluetooth_config_server --stdio
+```
+
+Test writes on a copy first:
+
+```bash
+cp config/contacts.family.json /tmp/contacts.family.bt-test.json
+printf '%s\n' '{"op":"set_rider","rider_name":"BT Test","subject_home_barangay":"Zapote"}' | python -m src.bluetooth_config_server --stdio --path /tmp/contacts.family.bt-test.json
+python -m src.contacts_config_store --path /tmp/contacts.family.bt-test.json get
+rm -f /tmp/contacts.family.bt-test.json /tmp/contacts.family.bt-test.json.bak
+```
+
+Prepare Bluetooth on the Pi:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y bluetooth bluez rfkill
+sudo systemctl enable --now bluetooth
+sudo rfkill unblock bluetooth
+```
+
+Make the Pi pairable/discoverable:
+
+```bash
+bluetoothctl
+power on
+agent on
+default-agent
+pairable on
+discoverable on
+show
+```
+
+In another Pi terminal, run the server:
+
+```bash
+cd ~/AccidentAlertSystem
+source .venv/bin/activate
+python -m src.bluetooth_config_server --channel 1
+```
+
+From an Android phone, use a Bluetooth serial terminal app, pair with the Pi, connect to the Serial Port/RFCOMM service, then send one JSON command per line:
+
+```json
+{"op":"get_config"}
+{"op":"update_contact","index":1,"name":"Mom","phone":"09201234567"}
+{"op":"set_rider","rider_name":"Juan Dela Cruz","subject_home_barangay":"Zapote"}
+```
+
+If channel `1` is busy, stop the server and try another channel:
+
+```bash
+python -m src.bluetooth_config_server --channel 3
+```
+
+Note: iOS does not generally expose classic RFCOMM/SPP to normal apps; for iPhone support we should implement BLE GATT after this RFCOMM proof-of-concept works.
+
+---
+
 ## SMS deploy checklist (after `git pull`)
 
 Use this after updating code so the Pi does **not** keep the old `SMARTSHELL UPDATE` template (causes `BiA@an` and failed delivery).
