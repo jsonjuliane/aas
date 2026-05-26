@@ -751,12 +751,15 @@ def _wait_for_cancel_window(
     tick_thread.start()
 
     keyword_bg_started = False
+    native_stderr_suppression = None
     if (
         not dry_run
         and VOICE_CANCEL_KEYWORD_ENABLED
         and voice_ctx.speech_ok
         and voice_ctx.keyword_session is not None
     ):
+        native_stderr_suppression = _suppress_native_stderr()
+        native_stderr_suppression.__enter__()
         keyword_bg_started = voice_cancel.start_background_keyword_listen(voice_ctx.keyword_session)
         if keyword_bg_started:
             print(
@@ -886,6 +889,8 @@ def _wait_for_cancel_window(
         stop_tick.set()
         if voice_ctx.keyword_session is not None:
             voice_cancel.stop_background_listening(voice_ctx.keyword_session)
+        if native_stderr_suppression is not None:
+            native_stderr_suppression.__exit__(None, None, None)
         if buzzer_ready:
             buzzer_hw.silence()
 
