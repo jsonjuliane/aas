@@ -93,8 +93,8 @@ VOICE_SOUND_RMS_THRESHOLD = 10000  # USB dongle baseline ~p95 6.2k; use mic_test
 VOICE_SOUND_RMS_SUSTAIN_CHUNKS = 5
 VOICE_SOUND_SAMPLE_RATE = 16000
 VOICE_SOUND_CHUNK_SIZE = 512
-# Keyword path (offline first; Google fallback only when engine=auto and offline engines are unavailable)
-VOICE_KEYWORD_ENGINE = "auto"  # auto | vosk | pocketsphinx | google
+# Keyword path. Force Google STT because PocketSphinx was unreliable on the production countdown.
+VOICE_KEYWORD_ENGINE = "google"  # auto | vosk | pocketsphinx | google
 VOICE_VOSK_MODEL_DIR = "models/vosk-model-small-en-us-0.15"
 VOICE_AMBIENT_CALIBRATION_SEC = 3.0  # calibrate before the cancel countdown starts
 VOICE_KEYWORD_PHRASE_SEC = 3.0  # max seconds per utterance ("cancel")

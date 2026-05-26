@@ -42,8 +42,6 @@ from src.config import (
     MP3_DEFAULT_VOLUME,
     VOICE_CANCEL_KEYWORD_ENABLED,
     VOICE_CANCEL_SOUND_ENABLED,
-    VOICE_KEYWORD_MIN_RMS,
-    VOICE_KEYWORD_PHRASE_SEC,
     VOICE_KEYWORD_RESULT_GRACE_SEC,
     VOICE_SOUND_CHUNK_SIZE,
     VOICE_SOUND_RMS_SUSTAIN_CHUNKS,
@@ -690,73 +688,20 @@ def _wait_for_cancel_window(
     tick_thread.start()
 
     keyword_bg_started = False
-    keyword_worker_stop = threading.Event()
-    keyword_worker_thread: threading.Thread | None = None
-
-    def _keyword_worker() -> None:
-        """Run mic_test --sphinx-oneshot style attempts during the cancel window."""
-        if voice_ctx.keyword_session is None:
-            return
-        session = voice_ctx.keyword_session
-        phrase_sec = max(0.8, float(VOICE_KEYWORD_PHRASE_SEC))
-        while (
-            not keyword_worker_stop.is_set()
-            and not session.cancel_requested
-            and time.monotonic() < t_fallback_end
-        ):
-            remaining = max(0.1, t_fallback_end - time.monotonic())
-            with _suppress_native_stderr():
-                if session.engine == "pocketsphinx":
-                    result = voice_cancel.listen_once_sphinx_oneshot(
-                        session,
-                        timeout_sec=min(5.0, remaining),
-                        phrase_sec=phrase_sec,
-                    )
-                else:
-                    result = voice_cancel.listen_once(
-                        session,
-                        timeout_sec=min(5.0, remaining),
-                        phrase_sec=phrase_sec,
-                    )
-            if keyword_worker_stop.is_set() or session.cancel_requested:
-                return
-            if result.rms < max(0, int(VOICE_KEYWORD_MIN_RMS)):
-                print(
-                    f"[Mic] Ignored keyword result below RMS gate "
-                    f"(RMS={result.rms}, min={VOICE_KEYWORD_MIN_RMS})"
-                )
-                time.sleep(0.02)
-                continue
-            if result.matched:
-                print(
-                    f"[Mic] Heard: {result.heard!r} "
-                    f"(engine={session.engine}, RMS={result.rms})"
-                )
-                session.request_cancel()
-                return
-            if result.reason in {"ok", "no_keyword"}:
-                print(
-                    f"[Mic] Heard: {result.heard!r} "
-                    f"(engine={session.engine}, RMS={result.rms}) — keyword not in phrase"
-                )
-            elif result.reason != "timeout":
-                print(f"[Mic] Keyword listen result: {result.reason} (RMS={result.rms})")
-            time.sleep(0.02)
-
     if (
         not dry_run
         and VOICE_CANCEL_KEYWORD_ENABLED
         and voice_ctx.speech_ok
         and voice_ctx.keyword_session is not None
     ):
-        keyword_worker_thread = threading.Thread(target=_keyword_worker, daemon=True)
-        keyword_worker_thread.start()
-        keyword_bg_started = True
-        print(
-            f"[Mic] Sphinx one-shot keyword listener active "
-            f"(say '{keyword}' clearly; engine={voice_ctx.keyword_session.engine}, "
-            f"timeout=5.0s, phrase={max(0.8, float(VOICE_KEYWORD_PHRASE_SEC)):.1f}s)."
-        )
+        keyword_bg_started = voice_cancel.start_background_keyword_listen(voice_ctx.keyword_session)
+        if keyword_bg_started:
+            print(
+                f"[Mic] Background keyword listener active "
+                f"(say '{keyword}' clearly; engine={voice_ctx.keyword_session.engine})."
+            )
+        else:
+            print("[Mic] Background keyword listener failed to start (button cancel still works).")
 
     if not dry_run:
         caps_listen = _voice_cancel_capabilities_payload(voice_ctx)
@@ -876,9 +821,6 @@ def _wait_for_cancel_window(
         return False, "timeout_hard_cap"
     finally:
         stop_tick.set()
-        keyword_worker_stop.set()
-        if keyword_worker_thread is not None:
-            keyword_worker_thread.join(timeout=0.2)
         if voice_ctx.keyword_session is not None:
             voice_cancel.stop_background_listening(voice_ctx.keyword_session)
         if buzzer_ready:
