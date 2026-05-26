@@ -693,29 +693,29 @@ def _wait_for_cancel_window(
     keyword_worker_thread: threading.Thread | None = None
 
     def _keyword_worker() -> None:
-        """Record fixed chunks and decode each with PocketSphinx keyword mode."""
+        """Run mic_test --sphinx-oneshot style attempts during the cancel window."""
         if voice_ctx.keyword_session is None:
             return
         session = voice_ctx.keyword_session
-        chunk_sec = max(0.8, float(VOICE_KEYWORD_PHRASE_SEC))
+        phrase_sec = max(0.8, float(VOICE_KEYWORD_PHRASE_SEC))
         while (
             not keyword_worker_stop.is_set()
             and not session.cancel_requested
             and time.monotonic() < t_fallback_end
         ):
             remaining = max(0.1, t_fallback_end - time.monotonic())
-            window_sec = min(chunk_sec, remaining)
             with _suppress_native_stderr():
                 if session.engine == "pocketsphinx":
-                    result = voice_cancel.listen_full_window_sphinx(
+                    result = voice_cancel.listen_once_sphinx_oneshot(
                         session,
-                        duration_sec=window_sec,
+                        timeout_sec=min(5.0, remaining),
+                        phrase_sec=phrase_sec,
                     )
                 else:
                     result = voice_cancel.listen_once(
                         session,
-                        timeout_sec=window_sec,
-                        phrase_sec=window_sec,
+                        timeout_sec=min(5.0, remaining),
+                        phrase_sec=phrase_sec,
                     )
             if keyword_worker_stop.is_set() or session.cancel_requested:
                 return
@@ -732,7 +732,7 @@ def _wait_for_cancel_window(
                     f"(engine={session.engine}, RMS={result.rms}) — keyword not in phrase"
                 )
             elif result.reason != "timeout":
-                print(f"[Mic] Keyword chunk result: {result.reason} (RMS={result.rms})")
+                print(f"[Mic] Keyword listen result: {result.reason} (RMS={result.rms})")
             time.sleep(0.02)
 
     if (
@@ -745,9 +745,9 @@ def _wait_for_cancel_window(
         keyword_worker_thread.start()
         keyword_bg_started = True
         print(
-            f"[Mic] Fixed-window keyword listener active "
+            f"[Mic] Sphinx one-shot keyword listener active "
             f"(say '{keyword}' clearly; engine={voice_ctx.keyword_session.engine}, "
-            f"chunk={max(0.8, float(VOICE_KEYWORD_PHRASE_SEC)):.1f}s)."
+            f"timeout=5.0s, phrase={max(0.8, float(VOICE_KEYWORD_PHRASE_SEC)):.1f}s)."
         )
 
     if not dry_run:
