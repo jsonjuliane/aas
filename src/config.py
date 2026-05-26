@@ -119,6 +119,9 @@ CONFIG_DIR = "config"
 CONTACTS_FAMILY_FILE = "contacts.family.json"
 LOGS_DIR = "logs"
 
+# Local phone/app config link PIN used until changed by the linked rider.
+CONFIG_LINK_PIN = "000000"
+
 # Phase 2 routing
 CONTACTS_BARANGAY_FILE = "contacts.barangay.json"
 GEOFENCE_BINAN_FILE = "geofence.binan.json"

@@ -94,9 +94,17 @@ python -m src.contacts_config_store --path /tmp/contacts.family.test.json update
 The future phone/Bluetooth service will use JSON commands through the same store:
 
 ```bash
-python -m src.contacts_config_protocol '{"op":"get_config"}' --pretty
-python -m src.contacts_config_protocol '{"op":"set_rider","rider_name":"Juan Dela Cruz","subject_home_barangay":"Zapote"}' --pretty
-python -m src.contacts_config_protocol '{"op":"update_contact","index":1,"name":"Mom","phone":"09201234567"}' --pretty
+python -m src.contacts_config_protocol '{"op":"ping"}' --pretty
+python -m src.contacts_config_protocol '{"op":"get_config","pin":"000000"}' --pretty
+python -m src.contacts_config_protocol '{"op":"set_rider","pin":"000000","rider_name":"Juan Dela Cruz","subject_home_barangay":"Zapote"}' --pretty
+python -m src.contacts_config_protocol '{"op":"update_contact","pin":"000000","index":1,"name":"Mom","phone":"09201234567"}' --pretty
+python -m src.contacts_config_protocol '{"op":"change_pin","pin":"000000","new_pin":"123456"}' --pretty
+```
+
+Default first-link PIN is `000000`. After linking, change it from the app or by command. The saved PIN is stored as a salted hash in `config/link_pin.json` (ignored by git). For temporary testing/admin override only:
+
+```bash
+export SMARTSHELL_CONFIG_PIN="123456"
 ```
 
 ---
@@ -117,15 +125,16 @@ First test the BLE protocol without Bluetooth hardware:
 cd ~/AccidentAlertSystem
 source .venv/bin/activate
 
-printf '%s\n' '{"op":"get_config"}' | python -m src.ble_config_server --stdio
-printf '%s\n' '{"op":"validate"}' | python -m src.ble_config_server --stdio
+printf '%s\n' '{"op":"ping"}' | python -m src.ble_config_server --stdio
+printf '%s\n' '{"op":"get_config","pin":"000000"}' | python -m src.ble_config_server --stdio
+printf '%s\n' '{"op":"validate","pin":"000000"}' | python -m src.ble_config_server --stdio
 ```
 
 Test writes on a copy first:
 
 ```bash
 cp config/contacts.family.json /tmp/contacts.family.ble-test.json
-printf '%s\n' '{"op":"set_rider","rider_name":"BLE Test","subject_home_barangay":"Zapote"}' | python -m src.ble_config_server --stdio --path /tmp/contacts.family.ble-test.json
+printf '%s\n' '{"op":"set_rider","pin":"000000","rider_name":"BLE Test","subject_home_barangay":"Zapote"}' | python -m src.ble_config_server --stdio --path /tmp/contacts.family.ble-test.json
 python -m src.contacts_config_store --path /tmp/contacts.family.ble-test.json get
 rm -f /tmp/contacts.family.ble-test.json /tmp/contacts.family.ble-test.json.bak
 ```
@@ -179,8 +188,10 @@ Example JSON commands for the app:
 
 ```json
 {"op":"get_config"}
-{"op":"update_contact","index":1,"name":"Mom","phone":"09201234567"}
-{"op":"set_rider","rider_name":"Juan Dela Cruz","subject_home_barangay":"Zapote"}
+{"op":"get_config","pin":"000000"}
+{"op":"update_contact","pin":"000000","index":1,"name":"Mom","phone":"09201234567"}
+{"op":"set_rider","pin":"000000","rider_name":"Juan Dela Cruz","subject_home_barangay":"Zapote"}
+{"op":"change_pin","pin":"000000","new_pin":"123456"}
 ```
 
 ---
@@ -195,15 +206,16 @@ First test the server protocol without Bluetooth hardware:
 cd ~/AccidentAlertSystem
 source .venv/bin/activate
 
-printf '%s\n' '{"op":"get_config"}' | python -m src.bluetooth_config_server --stdio
-printf '%s\n' '{"op":"validate"}' | python -m src.bluetooth_config_server --stdio
+printf '%s\n' '{"op":"ping"}' | python -m src.bluetooth_config_server --stdio
+printf '%s\n' '{"op":"get_config","pin":"000000"}' | python -m src.bluetooth_config_server --stdio
+printf '%s\n' '{"op":"validate","pin":"000000"}' | python -m src.bluetooth_config_server --stdio
 ```
 
 Test writes on a copy first:
 
 ```bash
 cp config/contacts.family.json /tmp/contacts.family.bt-test.json
-printf '%s\n' '{"op":"set_rider","rider_name":"BT Test","subject_home_barangay":"Zapote"}' | python -m src.bluetooth_config_server --stdio --path /tmp/contacts.family.bt-test.json
+printf '%s\n' '{"op":"set_rider","pin":"000000","rider_name":"BT Test","subject_home_barangay":"Zapote"}' | python -m src.bluetooth_config_server --stdio --path /tmp/contacts.family.bt-test.json
 python -m src.contacts_config_store --path /tmp/contacts.family.bt-test.json get
 rm -f /tmp/contacts.family.bt-test.json /tmp/contacts.family.bt-test.json.bak
 ```
@@ -241,8 +253,10 @@ From an Android phone, use a Bluetooth serial terminal app, pair with the Pi, co
 
 ```json
 {"op":"get_config"}
-{"op":"update_contact","index":1,"name":"Mom","phone":"09201234567"}
-{"op":"set_rider","rider_name":"Juan Dela Cruz","subject_home_barangay":"Zapote"}
+{"op":"get_config","pin":"000000"}
+{"op":"update_contact","pin":"000000","index":1,"name":"Mom","phone":"09201234567"}
+{"op":"set_rider","pin":"000000","rider_name":"Juan Dela Cruz","subject_home_barangay":"Zapote"}
+{"op":"change_pin","pin":"000000","new_pin":"123456"}
 ```
 
 If channel `1` is busy, stop the server and try another channel:

@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from src import link_security
 from src import contacts_config_store as store
 
 
@@ -40,6 +41,11 @@ def _parse_payload(payload: str | dict[str, Any]) -> dict[str, Any]:
     return parsed
 
 
+def _check_pin(req: dict[str, Any]) -> None:
+    if not link_security.verify_pin(req.get("pin")):
+        raise PermissionError("invalid or missing config PIN")
+
+
 def handle_request(
     payload: str | dict[str, Any],
     *,
@@ -49,6 +55,8 @@ def handle_request(
     Handle one phone/app config request.
 
     Supported ops:
+    - ``ping`` / ``status`` (no PIN required)
+    - ``change_pin`` with current ``pin`` and ``new_pin``
     - ``get_config``
     - ``validate``
     - ``set_rider`` with ``rider_name`` and/or ``subject_home_barangay``
@@ -62,6 +70,24 @@ def handle_request(
         req = _parse_payload(payload)
         request_id = req.get("request_id")
         op = str(req.get("op") or "").strip().lower()
+        if op in {"ping", "status"}:
+            return _result(
+                ok=True,
+                request_id=request_id,
+                data={
+                    "service": "SmartShell Config",
+                    "auth_required": link_security.auth_required(),
+                },
+            )
+        _check_pin(req)
+        if op == "change_pin":
+            new_pin = req.get("new_pin")
+            link_security.set_pin(new_pin)
+            return _result(
+                ok=True,
+                request_id=request_id,
+                data={"pin_changed": True},
+            )
         if op in {"get", "get_config", "read_config"}:
             return _result(
                 ok=True,
@@ -120,6 +146,13 @@ def handle_request(
             cfg = store.replace_contacts(contacts, path=path)
             return _result(ok=True, request_id=request_id, data=store.public_config(cfg))
         raise ValueError(f"Unsupported op: {op!r}")
+    except PermissionError as e:
+        return _result(
+            ok=False,
+            request_id=request_id,
+            auth_required=True,
+            error=str(e),
+        )
     except Exception as e:
         return _result(ok=False, request_id=request_id, error=str(e))
 

@@ -23,6 +23,7 @@ ENV/
 logs/
 *.log
 models/
+config/link_pin.json
 
 # Secrets / sensitive config (use .example as template)
 .env
