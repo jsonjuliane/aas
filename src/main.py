@@ -42,6 +42,7 @@ from src.config import (
     MP3_DEFAULT_VOLUME,
     VOICE_CANCEL_KEYWORD_ENABLED,
     VOICE_CANCEL_SOUND_ENABLED,
+    VOICE_KEYWORD_PHRASE_SEC,
     VOICE_KEYWORD_RESULT_GRACE_SEC,
     VOICE_SOUND_CHUNK_SIZE,
     VOICE_SOUND_RMS_SUSTAIN_CHUNKS,
@@ -692,39 +693,47 @@ def _wait_for_cancel_window(
     keyword_worker_thread: threading.Thread | None = None
 
     def _keyword_worker() -> None:
-        """Run one PocketSphinx-style listen across the cancel window."""
+        """Record fixed chunks and decode each with PocketSphinx keyword mode."""
         if voice_ctx.keyword_session is None:
             return
         session = voice_ctx.keyword_session
-        listen_window = max(0.2, timeout_sec)
-        with _suppress_native_stderr():
-            if session.engine == "pocketsphinx":
-                result = voice_cancel.listen_full_window_sphinx(
-                    session,
-                    duration_sec=listen_window,
+        chunk_sec = max(0.8, float(VOICE_KEYWORD_PHRASE_SEC))
+        while (
+            not keyword_worker_stop.is_set()
+            and not session.cancel_requested
+            and time.monotonic() < t_fallback_end
+        ):
+            remaining = max(0.1, t_fallback_end - time.monotonic())
+            window_sec = min(chunk_sec, remaining)
+            with _suppress_native_stderr():
+                if session.engine == "pocketsphinx":
+                    result = voice_cancel.listen_full_window_sphinx(
+                        session,
+                        duration_sec=window_sec,
+                    )
+                else:
+                    result = voice_cancel.listen_once(
+                        session,
+                        timeout_sec=window_sec,
+                        phrase_sec=window_sec,
+                    )
+            if keyword_worker_stop.is_set() or session.cancel_requested:
+                return
+            if result.matched:
+                print(
+                    f"[Mic] Heard: {result.heard!r} "
+                    f"(engine={session.engine}, RMS={result.rms})"
                 )
-            else:
-                result = voice_cancel.listen_once(
-                    session,
-                    timeout_sec=listen_window,
-                    phrase_sec=listen_window,
+                session.request_cancel()
+                return
+            if result.reason in {"ok", "no_keyword"}:
+                print(
+                    f"[Mic] Heard: {result.heard!r} "
+                    f"(engine={session.engine}, RMS={result.rms}) — keyword not in phrase"
                 )
-        if keyword_worker_stop.is_set() or session.cancel_requested:
-            return
-        if result.matched:
-            print(
-                f"[Mic] Heard: {result.heard!r} "
-                f"(engine={session.engine}, RMS={result.rms})"
-            )
-            session.request_cancel()
-            return
-        if result.reason in {"ok", "no_keyword"}:
-            print(
-                f"[Mic] Heard: {result.heard!r} "
-                f"(engine={session.engine}, RMS={result.rms}) — keyword not in phrase"
-            )
-        elif result.reason not in {"timeout"}:
-            print(f"[Mic] Keyword listen result: {result.reason} (RMS={result.rms})")
+            elif result.reason != "timeout":
+                print(f"[Mic] Keyword chunk result: {result.reason} (RMS={result.rms})")
+            time.sleep(0.02)
 
     if (
         not dry_run
@@ -736,8 +745,9 @@ def _wait_for_cancel_window(
         keyword_worker_thread.start()
         keyword_bg_started = True
         print(
-            f"[Mic] Full-window keyword listener recording for {timeout_sec:.1f}s "
-            f"(say '{keyword}' clearly; engine={voice_ctx.keyword_session.engine})."
+            f"[Mic] Fixed-window keyword listener active "
+            f"(say '{keyword}' clearly; engine={voice_ctx.keyword_session.engine}, "
+            f"chunk={max(0.8, float(VOICE_KEYWORD_PHRASE_SEC)):.1f}s)."
         )
 
     if not dry_run:

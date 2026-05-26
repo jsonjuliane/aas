@@ -449,10 +449,10 @@ def listen_full_window_sphinx(
     duration_sec: float,
 ) -> KeywordListenResult:
     """
-    Record one full cancel window, then decode it with PocketSphinx.
+    Record a fixed audio window, then decode it with PocketSphinx.
 
     This avoids SpeechRecognition's speech-start timeout in the real countdown
-    path. It captures the entire countdown window instead of waiting for a
+    path. It captures audio for the requested duration instead of waiting for a
     phrase boundary, then uses PocketSphinx keyword mode only.
     """
     duration = max(0.2, float(duration_sec))
