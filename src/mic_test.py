@@ -181,9 +181,19 @@ def _run_sphinx_oneshot(
     recognizer.pause_threshold = 0.6
     recognizer.phrase_threshold = 0.25
 
+    names = voice_cancel.list_microphone_names()
+    idx = device_index
+    if idx is None and names:
+        idx = 0
+    dev_name = names[idx] if idx is not None and 0 <= idx < len(names) else "?"
+
     try:
-        mic = sr.Microphone(device_index=device_index, sample_rate=16000)
-        with mic as source:
+        # Open with the device's native/default sample rate. Some Pi USB mics
+        # reject 16 kHz at open time; SpeechRecognition/PocketSphinx can still
+        # convert captured audio to 16 kHz afterward.
+        mic = sr.Microphone(device_index=idx)
+        print(f"[Mic] Opening device index={idx} name={dev_name!r}")
+        with _suppress_native_stderr(), mic as source:
             print(f"[Mic] Adjusting for background noise for {ambient_sec:.1f}s...")
             recognizer.adjust_for_ambient_noise(source, duration=max(0.3, ambient_sec))
             print(
