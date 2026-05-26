@@ -195,7 +195,7 @@ def run_ble_server(
             self.add_service(ConfigService(bus, 0))
 
         def get_path(self) -> str:
-            return self.path
+            return dbus.ObjectPath(self.path)
 
         def add_service(self, service: Any) -> None:
             self.services.append(service)
@@ -223,18 +223,14 @@ def run_ble_server(
             return {
                 GATT_SERVICE_IFACE: _dbus_dict(
                     {
-                        "UUID": self.uuid,
-                        "Primary": self.primary,
-                        "Characteristics": _dbus_array(
-                            [chrc.get_path() for chrc in self.characteristics],
-                            "o",
-                        ),
+                        "UUID": dbus.String(self.uuid),
+                        "Primary": dbus.Boolean(self.primary),
                     }
                 )
             }
 
         def get_path(self) -> str:
-            return self.path
+            return dbus.ObjectPath(self.path)
 
         def add_characteristic(self, chrc: Any) -> None:
             self.characteristics.append(chrc)
@@ -257,15 +253,15 @@ def run_ble_server(
             return {
                 GATT_CHRC_IFACE: _dbus_dict(
                     {
-                        "Service": self.service.get_path(),
-                        "UUID": self.uuid,
+                        "Service": dbus.ObjectPath(self.service.get_path()),
+                        "UUID": dbus.String(self.uuid),
                         "Flags": _dbus_array(self.flags, "s"),
                     }
                 )
             }
 
         def get_path(self) -> str:
-            return self.path
+            return dbus.ObjectPath(self.path)
 
         @dbus_service.method(DBUS_PROP_IFACE, in_signature="s", out_signature="a{sv}")
         def GetAll(self, interface: str) -> Any:
@@ -381,15 +377,15 @@ def run_ble_server(
             super().__init__(bus, self.path)
 
         def get_path(self) -> str:
-            return self.path
+            return dbus.ObjectPath(self.path)
 
         def get_properties(self) -> Any:
             return {
                 LE_ADVERTISEMENT_IFACE: _dbus_dict(
                     {
-                        "Type": "peripheral",
+                        "Type": dbus.String("peripheral"),
                         "ServiceUUIDs": _dbus_array([SERVICE_UUID], "s"),
-                        "LocalName": local_name,
+                        "LocalName": dbus.String(local_name),
                         "Includes": _dbus_array(["tx-power"], "s"),
                     }
                 )
