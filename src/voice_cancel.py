@@ -66,6 +66,9 @@ class VoiceKeywordSession:
             return True
         return False
 
+    def request_cancel(self) -> None:
+        self._cancel_event.set()
+
 
 def list_microphone_names() -> list[str]:
     import speech_recognition as sr
@@ -361,6 +364,83 @@ def listen_once(
         rms=rms,
         reason="ok" if matched else "no_keyword",
     )
+
+
+def listen_once_sphinx_oneshot(
+    session: VoiceKeywordSession,
+    *,
+    timeout_sec: float = 5.0,
+    phrase_sec: float | None = None,
+) -> KeywordListenResult:
+    """
+    Blocking PocketSphinx one-shot listen matching ``mic_test --sphinx-oneshot``.
+
+    Unlike the generic keyword path, this intentionally does not apply the RMS
+    gate. The Pi bench tests showed PocketSphinx can still recognize the cancel
+    keyword at lower RMS values.
+    """
+    phrase = max(0.8, float(VOICE_KEYWORD_PHRASE_SEC if phrase_sec is None else phrase_sec))
+    timeout = max(0.1, float(timeout_sec))
+
+    try:
+        import pocketsphinx  # noqa: F401
+        import speech_recognition as sr
+    except ImportError:
+        return KeywordListenResult(reason="unavailable")
+
+    try:
+        with session.microphone as source:
+            audio = session.recognizer.listen(
+                source,
+                timeout=timeout,
+                phrase_time_limit=phrase,
+            )
+    except sr.WaitTimeoutError:
+        return KeywordListenResult(reason="timeout")
+    except Exception as e:
+        return KeywordListenResult(reason=classify_recognition_error(e))
+
+    try:
+        raw = audio.get_raw_data(convert_rate=16000, convert_width=2)
+        rms = int(audioop.rms(raw, 2)) if raw else 0
+    except Exception:
+        rms = 0
+
+    heard_free = ""
+    try:
+        heard_free = session.recognizer.recognize_sphinx(audio).strip().lower()
+    except sr.UnknownValueError:
+        heard_free = ""
+    except sr.RequestError as e:
+        return KeywordListenResult(rms=rms, reason=classify_recognition_error(e))
+
+    heard_keyword = ""
+    try:
+        heard_keyword = (
+            session.recognizer.recognize_sphinx(
+                audio,
+                keyword_entries=[(session.keyword, 1.0)],
+            )
+            .strip()
+            .lower()
+        )
+    except sr.UnknownValueError:
+        heard_keyword = ""
+    except sr.RequestError as e:
+        return KeywordListenResult(rms=rms, reason=classify_recognition_error(e))
+
+    heard = heard_keyword or heard_free
+    matched = _keyword_in_text(session.keyword, heard_keyword) or _keyword_in_text(
+        session.keyword,
+        heard_free,
+    )
+    if matched:
+        reason = "ok"
+    elif heard:
+        reason = "no_keyword"
+    else:
+        reason = "unknown"
+    return KeywordListenResult(matched=matched, heard=heard, rms=rms, reason=reason)
 
 
 def classify_recognition_error(exc: BaseException) -> str:

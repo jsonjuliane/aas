@@ -688,20 +688,58 @@ def _wait_for_cancel_window(
     tick_thread.start()
 
     keyword_bg_started = False
+    keyword_worker_stop = threading.Event()
+    keyword_worker_thread: threading.Thread | None = None
+
+    def _keyword_worker() -> None:
+        """Run one PocketSphinx-style listen across the cancel window."""
+        if voice_ctx.keyword_session is None:
+            return
+        session = voice_ctx.keyword_session
+        listen_window = max(0.2, timeout_sec)
+        with _suppress_native_stderr():
+            if session.engine == "pocketsphinx":
+                result = voice_cancel.listen_once_sphinx_oneshot(
+                    session,
+                    timeout_sec=listen_window,
+                    phrase_sec=listen_window,
+                )
+            else:
+                result = voice_cancel.listen_once(
+                    session,
+                    timeout_sec=listen_window,
+                    phrase_sec=listen_window,
+                )
+        if keyword_worker_stop.is_set() or session.cancel_requested:
+            return
+        if result.matched:
+            print(
+                f"[Mic] Heard: {result.heard!r} "
+                f"(engine={session.engine}, RMS={result.rms})"
+            )
+            session.request_cancel()
+            return
+        if result.reason in {"ok", "no_keyword"}:
+            print(
+                f"[Mic] Heard: {result.heard!r} "
+                f"(engine={session.engine}, RMS={result.rms}) — keyword not in phrase"
+            )
+        elif result.reason not in {"timeout"}:
+            print(f"[Mic] Keyword listen result: {result.reason} (RMS={result.rms})")
+
     if (
         not dry_run
         and VOICE_CANCEL_KEYWORD_ENABLED
         and voice_ctx.speech_ok
         and voice_ctx.keyword_session is not None
     ):
-        keyword_bg_started = voice_cancel.start_background_keyword_listen(voice_ctx.keyword_session)
-        if keyword_bg_started:
-            print(
-                f"[Mic] Background keyword listener active "
-                f"(say '{keyword}' clearly; engine={voice_ctx.keyword_session.engine})."
-            )
-        else:
-            print("[Mic] Background keyword listener failed to start (button cancel still works).")
+        keyword_worker_thread = threading.Thread(target=_keyword_worker, daemon=True)
+        keyword_worker_thread.start()
+        keyword_bg_started = True
+        print(
+            f"[Mic] One-shot keyword listener active for {timeout_sec:.1f}s "
+            f"(say '{keyword}' clearly; engine={voice_ctx.keyword_session.engine})."
+        )
 
     if not dry_run:
         caps_listen = _voice_cancel_capabilities_payload(voice_ctx)
@@ -821,6 +859,9 @@ def _wait_for_cancel_window(
         return False, "timeout_hard_cap"
     finally:
         stop_tick.set()
+        keyword_worker_stop.set()
+        if keyword_worker_thread is not None:
+            keyword_worker_thread.join(timeout=0.2)
         if voice_ctx.keyword_session is not None:
             voice_cancel.stop_background_listening(voice_ctx.keyword_session)
         if buzzer_ready:
