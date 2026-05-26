@@ -21,7 +21,9 @@ import sys
 import time
 
 from src.config import (
+    VOICE_AMBIENT_CALIBRATION_SEC,
     VOICE_KEYWORD_MIN_RMS,
+    VOICE_KEYWORD_PHRASE_SEC,
     VOICE_SOUND_CHUNK_SIZE,
     VOICE_SOUND_RMS_THRESHOLD,
     VOICE_SOUND_SAMPLE_RATE,
@@ -109,9 +111,14 @@ def _run_keyword_test(
     keyword: str,
     duration_sec: float,
     *,
+    timeout_sec: float,
     verbose: bool,
 ) -> int:
-    print(f"[Mic] Keyword test for {duration_sec:.0f}s (say '{keyword}' clearly)...")
+    print(
+        f"[Mic] Keyword test for {duration_sec:.0f}s "
+        f"(say '{keyword}' clearly; listen_timeout={timeout_sec:.1f}s, "
+        f"phrase_limit={VOICE_KEYWORD_PHRASE_SEC:.1f}s)..."
+    )
     with _suppress_native_stderr():
         session = voice_cancel.open_keyword_session(
             device_index=device_index,
@@ -133,7 +140,7 @@ def _run_keyword_test(
     try:
         while time.monotonic() < deadline:
             with _suppress_native_stderr():
-                result = voice_cancel.listen_once(session, timeout_sec=0.4)
+                result = voice_cancel.listen_once(session, timeout_sec=timeout_sec)
             attempts += 1
 
             if result.matched:
@@ -361,7 +368,7 @@ def main() -> int:
     ap.add_argument("--log-interval", type=float, default=0.35)
     ap.add_argument("--list-only", action="store_true", help="List devices and exit")
     ap.add_argument("--baseline", action="store_true", help="Measure idle RMS + suggest thresholds")
-    ap.add_argument("--baseline-sec", type=float, default=3.0)
+    ap.add_argument("--baseline-sec", type=float, default=VOICE_AMBIENT_CALIBRATION_SEC)
     ap.add_argument(
         "--keyword-test",
         action="store_true",
@@ -369,6 +376,12 @@ def main() -> int:
     )
     ap.add_argument("--keyword", type=str, default="cancel")
     ap.add_argument("--keyword-sec", type=float, default=15.0)
+    ap.add_argument(
+        "--keyword-timeout-sec",
+        type=float,
+        default=5.0,
+        help="Seconds to wait for speech to start in each keyword-test attempt",
+    )
     ap.add_argument("--verbose", action="store_true", help="Log quiet/timeouts in keyword-test")
     ap.add_argument(
         "--sphinx-oneshot",
@@ -376,7 +389,7 @@ def main() -> int:
         help="One-shot offline PocketSphinx transcription and keyword check",
     )
     ap.add_argument("--sphinx-timeout-sec", type=float, default=5.0)
-    ap.add_argument("--sphinx-phrase-sec", type=float, default=3.0)
+    ap.add_argument("--sphinx-phrase-sec", type=float, default=VOICE_KEYWORD_PHRASE_SEC)
     ap.add_argument("--record", type=str, default="", metavar="PATH", help="Record WAV and exit")
     ap.add_argument("--record-sec", type=float, default=5.0)
     ap.add_argument(
@@ -416,6 +429,7 @@ def main() -> int:
             dev,
             args.keyword,
             args.keyword_sec,
+            timeout_sec=max(0.1, float(args.keyword_timeout_sec)),
             verbose=bool(args.verbose),
         )
 
