@@ -42,6 +42,7 @@ from src.config import (
     MP3_DEFAULT_VOLUME,
     VOICE_CANCEL_KEYWORD_ENABLED,
     VOICE_CANCEL_SOUND_ENABLED,
+    VOICE_KEYWORD_MIN_RMS,
     VOICE_KEYWORD_PHRASE_SEC,
     VOICE_KEYWORD_RESULT_GRACE_SEC,
     VOICE_SOUND_CHUNK_SIZE,
@@ -719,6 +720,13 @@ def _wait_for_cancel_window(
                     )
             if keyword_worker_stop.is_set() or session.cancel_requested:
                 return
+            if result.rms < max(0, int(VOICE_KEYWORD_MIN_RMS)):
+                print(
+                    f"[Mic] Ignored keyword result below RMS gate "
+                    f"(RMS={result.rms}, min={VOICE_KEYWORD_MIN_RMS})"
+                )
+                time.sleep(0.02)
+                continue
             if result.matched:
                 print(
                     f"[Mic] Heard: {result.heard!r} "
