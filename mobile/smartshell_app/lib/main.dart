@@ -430,13 +430,12 @@ class ConnectScreen extends StatefulWidget {
 }
 
 class _ConnectScreenState extends State<ConnectScreen> {
-  final _pinController = TextEditingController(text: '000000');
-  bool _useMock = true;
+  final _pinController = TextEditingController();
   bool _loading = false;
   bool _scanning = false;
   List<ScanResult> _helmets = [];
   ScanResult? _selectedHelmet;
-  String _status = 'Enter the helmet PIN to link and read config.';
+  String _status = 'Scan for nearby SmartShell helmets, then enter the PIN.';
 
   @override
   void dispose() {
@@ -445,28 +444,32 @@ class _ConnectScreenState extends State<ConnectScreen> {
   }
 
   Future<void> _connect() async {
+    final pin = _pinController.text.trim();
+    if (pin.isEmpty) {
+      setState(() {
+        _status = 'Enter the helmet PIN before connecting.';
+      });
+      return;
+    }
+
     setState(() {
       _loading = true;
       _status = 'Connecting...';
     });
 
-    final pin = _pinController.text.trim();
     late final ConfigTransport transport;
     try {
-      final selected =
-          _useMock
-              ? null
-              : _selectedHelmet ??
-                  await BleConfigTransport.scanSmartShell().then((results) {
-                    if (results.isEmpty) {
-                      throw Exception('No SmartShell helmets found.');
-                    }
-                    return results.first;
-                  });
-      transport =
-          _useMock
-              ? MockConfigTransport()
-              : await BleConfigTransport.connectTo(selected!);
+      final ScanResult selected;
+      if (_selectedHelmet != null) {
+        selected = _selectedHelmet!;
+      } else {
+        final results = await BleConfigTransport.scanSmartShell();
+        if (results.isEmpty) {
+          throw Exception('No SmartShell helmets found.');
+        }
+        selected = results.first;
+      }
+      transport = await BleConfigTransport.connectTo(selected);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -478,6 +481,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
     final ping = await transport.send({'op': 'ping'});
     if (!mounted) return;
     if (!ping.ok) {
+      await transport.close();
       setState(() {
         _loading = false;
         _status = ping.error;
@@ -488,6 +492,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
     final response = await transport.send({'op': 'get_config', 'pin': pin});
     if (!mounted) return;
     if (!response.ok || response.config == null) {
+      await transport.close();
       setState(() {
         _loading = false;
         _status = response.error;
@@ -573,60 +578,43 @@ class _ConnectScreenState extends State<ConnectScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    SegmentedButton<bool>(
-                      segments: const [
-                        ButtonSegment(value: true, label: Text('Mock')),
-                        ButtonSegment(value: false, label: Text('BLE')),
-                      ],
-                      selected: {_useMock},
-                      onSelectionChanged:
-                          (value) => setState(() {
-                            _useMock = value.first;
-                            _status =
-                                _useMock
-                                    ? 'Enter the helmet PIN to link and read config.'
-                                    : 'Scan for nearby SmartShell helmets.';
-                          }),
+                    OutlinedButton.icon(
+                      onPressed: _scanning || _loading ? null : _scanHelmets,
+                      icon:
+                          _scanning
+                              ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                              : const Icon(Icons.search),
+                      label: const Text('Scan for Helmets'),
                     ),
-                    const SizedBox(height: 16),
-                    if (!_useMock) ...[
-                      OutlinedButton.icon(
-                        onPressed: _scanning || _loading ? null : _scanHelmets,
-                        icon:
-                            _scanning
-                                ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                                : const Icon(Icons.search),
-                        label: const Text('Scan for Helmets'),
-                      ),
-                      const SizedBox(height: 12),
-                      if (_helmets.isNotEmpty)
-                        ..._helmets.map(
-                          (helmet) => RadioListTile<ScanResult>(
-                            value: helmet,
-                            groupValue: _selectedHelmet,
-                            onChanged:
-                                (value) =>
-                                    setState(() => _selectedHelmet = value),
-                            title: Text(BleConfigTransport.displayName(helmet)),
-                            subtitle: Text(
-                              '${helmet.device.remoteId} • RSSI ${helmet.rssi}',
-                            ),
+                    const SizedBox(height: 12),
+                    if (_helmets.isNotEmpty)
+                      ..._helmets.map(
+                        (helmet) => RadioListTile<ScanResult>(
+                          value: helmet,
+                          groupValue: _selectedHelmet,
+                          onChanged:
+                              _loading || _scanning
+                                  ? null
+                                  : (value) =>
+                                      setState(() => _selectedHelmet = value),
+                          title: Text(BleConfigTransport.displayName(helmet)),
+                          subtitle: Text(
+                            '${helmet.device.remoteId} • RSSI ${helmet.rssi}',
                           ),
                         ),
-                      const SizedBox(height: 8),
-                    ],
+                      ),
+                    const SizedBox(height: 8),
                     TextField(
                       controller: _pinController,
                       decoration: const InputDecoration(
                         labelText: 'Helmet PIN',
-                        helperText:
-                            'Default first-link PIN is 000000. Change it after linking.',
+                        helperText: 'Enter the current helmet config PIN.',
                         prefixIcon: Icon(Icons.lock_outline),
                       ),
                       obscureText: true,
@@ -645,11 +633,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
                                 ),
                               )
                               : const Icon(Icons.bluetooth_connected),
-                      label: Text(
-                        _useMock
-                            ? 'Open Mock Helmet'
-                            : 'Connect to Selected Helmet',
-                      ),
+                      label: const Text('Connect to Helmet'),
                     ),
                     const SizedBox(height: 12),
                     Text(_status, textAlign: TextAlign.center),
@@ -688,6 +672,7 @@ class _ConfigHomeScreenState extends State<ConfigHomeScreen> {
   late TextEditingController _homeController;
   final _newPinController = TextEditingController();
   bool _busy = false;
+  String _busyLabel = 'Working...';
   String _currentPin = '';
   String _lastCommand = '{"op":"get_config"}';
   String _lastResponse = 'Connected.';
@@ -710,16 +695,41 @@ class _ConfigHomeScreenState extends State<ConfigHomeScreen> {
     super.dispose();
   }
 
-  Future<void> _send(Map<String, dynamic> command) async {
+  Future<void> _send(
+    Map<String, dynamic> command, {
+    String busyLabel = 'Working...',
+  }) async {
     setState(() {
       _busy = true;
+      _busyLabel = busyLabel;
       _lastCommand = const JsonEncoder.withIndent('  ').convert(command);
     });
-    final response = await widget.transport.send({
-      ...command,
-      'pin': _currentPin,
-    });
+
+    final ConfigResponse response;
+    try {
+      response = await widget.transport.send({...command, 'pin': _currentPin});
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _lastResponse = 'Request failed: $e';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Request failed: $e'),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+      return;
+    }
+
     if (!mounted) return;
+    final nextConfig = response.config;
+    if (response.ok && nextConfig != null) {
+      _riderController.text = nextConfig.riderName;
+      _homeController.text = nextConfig.homeBarangay;
+    }
+
     setState(() {
       _busy = false;
       _lastResponse = const JsonEncoder.withIndent('  ').convert(response.raw);
@@ -727,11 +737,8 @@ class _ConfigHomeScreenState extends State<ConfigHomeScreen> {
         _currentPin = '${command['new_pin']}';
         _newPinController.clear();
       }
-      final nextConfig = response.config;
       if (response.ok && nextConfig != null) {
         _config = nextConfig;
-        _riderController.text = _config.riderName;
-        _homeController.text = _config.homeBarangay;
       }
     });
     if (!response.ok && mounted) {
@@ -749,10 +756,11 @@ class _ConfigHomeScreenState extends State<ConfigHomeScreen> {
       'op': 'set_rider',
       'rider_name': _riderController.text.trim(),
       'subject_home_barangay': _homeController.text.trim(),
-    });
+    }, busyLabel: 'Saving rider info...');
   }
 
-  Future<void> _reload() => _send({'op': 'get_config'});
+  Future<void> _reload() =>
+      _send({'op': 'get_config'}, busyLabel: 'Reloading config...');
 
   Future<void> _changePin() async {
     final newPin = _newPinController.text.trim();
@@ -765,72 +773,61 @@ class _ConfigHomeScreenState extends State<ConfigHomeScreen> {
       );
       return;
     }
-    await _send({'op': 'change_pin', 'new_pin': newPin});
+    await _send({
+      'op': 'change_pin',
+      'new_pin': newPin,
+    }, busyLabel: 'Changing PIN...');
+  }
+
+  Future<void> _returnToConnect() async {
+    setState(() {
+      _busy = true;
+      _busyLabel = 'Returning to connect screen...';
+    });
+    await widget.transport.close();
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(builder: (_) => const ConnectScreen()),
+    );
   }
 
   Future<void> _showContactSheet({
     EmergencyContact? contact,
     int? index,
   }) async {
-    final name = TextEditingController(text: contact?.name ?? '');
-    final phone = TextEditingController(text: contact?.phone ?? '');
     final result = await showModalBottomSheet<Map<String, String>>(
       context: context,
       isScrollControlled: true,
       backgroundColor: const Color(0xff181a20),
-      builder:
-          (context) => Padding(
-            padding: EdgeInsets.only(
-              left: 20,
-              right: 20,
-              top: 20,
-              bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  contact == null ? 'Add Contact' : 'Edit Contact',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: name,
-                  decoration: const InputDecoration(labelText: 'Name'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: phone,
-                  decoration: const InputDecoration(labelText: 'Phone'),
-                  keyboardType: TextInputType.phone,
-                ),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed:
-                      () => Navigator.pop(context, {
-                        'name': name.text.trim(),
-                        'phone': phone.text.trim(),
-                      }),
-                  child: const Text('Save'),
-                ),
-              ],
-            ),
-          ),
+      builder: (_) => ContactEditorSheet(contact: contact),
     );
-    name.dispose();
-    phone.dispose();
+    if (!mounted) return;
     if (result == null) return;
     if (contact == null) {
-      await _send({'op': 'add_contact', ...result});
+      await _send({
+        'op': 'add_contact',
+        ...result,
+      }, busyLabel: 'Adding contact...');
     } else {
-      await _send({'op': 'update_contact', 'index': index, ...result});
+      await _send({
+        'op': 'update_contact',
+        'index': index,
+        ...result,
+      }, busyLabel: 'Saving contact...');
     }
   }
 
   Future<void> _deleteContact(int index) async {
+    if (_config.contacts.length <= 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('At least one family contact is required.'),
+          backgroundColor: Colors.amber.shade800,
+        ),
+      );
+      return;
+    }
+
     final ok = await showDialog<bool>(
       context: context,
       builder:
@@ -851,8 +848,12 @@ class _ConfigHomeScreenState extends State<ConfigHomeScreen> {
             ],
           ),
     );
+    if (!mounted) return;
     if (ok == true) {
-      await _send({'op': 'delete_contact', 'index': index});
+      await _send({
+        'op': 'delete_contact',
+        'index': index,
+      }, busyLabel: 'Deleting contact...');
     }
   }
 
@@ -860,144 +861,167 @@ class _ConfigHomeScreenState extends State<ConfigHomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          tooltip: 'Back to connect',
+          onPressed: _busy ? null : _returnToConnect,
+          icon: const Icon(Icons.arrow_back),
+        ),
         title: const Text('SmartShell Setup'),
         actions: [
           IconButton(
             onPressed: _busy ? null : _reload,
-            icon: const Icon(Icons.refresh),
+            icon:
+                _busy
+                    ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                    : const Icon(Icons.refresh),
           ),
         ],
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 760),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  StatusBanner(label: widget.transport.label),
-                  const SizedBox(height: 16),
-                  GlassCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const SectionTitle(
-                          icon: Icons.person_outline,
-                          title: 'Rider Info',
-                        ),
-                        TextField(
-                          controller: _riderController,
-                          decoration: const InputDecoration(
-                            labelText: 'Rider name',
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _homeController,
-                          decoration: const InputDecoration(
-                            labelText: 'Home barangay',
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        FilledButton.icon(
-                          onPressed: _busy ? null : _saveRider,
-                          icon: const Icon(Icons.save_outlined),
-                          label: const Text('Save Rider Info'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  GlassCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const SectionTitle(
-                          icon: Icons.admin_panel_settings_outlined,
-                          title: 'Link Security',
-                        ),
-                        TextField(
-                          controller: _newPinController,
-                          decoration: const InputDecoration(
-                            labelText: 'New helmet PIN',
-                            helperText:
-                                'Use 4-12 digits. Future links require this PIN.',
-                          ),
-                          obscureText: true,
-                          keyboardType: TextInputType.number,
-                        ),
-                        const SizedBox(height: 16),
-                        FilledButton.icon(
-                          onPressed: _busy ? null : _changePin,
-                          icon: const Icon(Icons.lock_reset),
-                          label: const Text('Change Link PIN'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  GlassCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
+      body: Stack(
+        children: [
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 760),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      StatusBanner(label: widget.transport.label),
+                      const SizedBox(height: 16),
+                      GlassCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            const Expanded(
-                              child: SectionTitle(
-                                icon: Icons.contact_phone_outlined,
-                                title: 'Emergency Contacts',
+                            const SectionTitle(
+                              icon: Icons.person_outline,
+                              title: 'Rider Info',
+                            ),
+                            TextField(
+                              controller: _riderController,
+                              decoration: const InputDecoration(
+                                labelText: 'Rider name',
                               ),
                             ),
-                            Text('${_config.contacts.length}/3'),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _homeController,
+                              decoration: const InputDecoration(
+                                labelText: 'Home barangay',
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            FilledButton.icon(
+                              onPressed: _busy ? null : _saveRider,
+                              icon: const Icon(Icons.save_outlined),
+                              label: const Text('Save Rider Info'),
+                            ),
                           ],
                         ),
-                        const SizedBox(height: 8),
-                        for (var i = 0; i < _config.contacts.length; i++)
-                          ContactTile(
-                            contact: _config.contacts[i],
-                            onEdit:
-                                () => _showContactSheet(
-                                  contact: _config.contacts[i],
-                                  index: i + 1,
+                      ),
+                      const SizedBox(height: 16),
+                      GlassCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const SectionTitle(
+                              icon: Icons.admin_panel_settings_outlined,
+                              title: 'Link Security',
+                            ),
+                            TextField(
+                              controller: _newPinController,
+                              decoration: const InputDecoration(
+                                labelText: 'New helmet PIN',
+                                helperText:
+                                    'Use 4-12 digits. Future links require this PIN.',
+                              ),
+                              obscureText: true,
+                              keyboardType: TextInputType.number,
+                            ),
+                            const SizedBox(height: 16),
+                            FilledButton.icon(
+                              onPressed: _busy ? null : _changePin,
+                              icon: const Icon(Icons.lock_reset),
+                              label: const Text('Change Link PIN'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      GlassCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                const Expanded(
+                                  child: SectionTitle(
+                                    icon: Icons.contact_phone_outlined,
+                                    title: 'Emergency Contacts',
+                                  ),
                                 ),
-                            onDelete: () => _deleteContact(i + 1),
-                          ),
-                        const SizedBox(height: 12),
-                        OutlinedButton.icon(
-                          onPressed:
-                              _busy || _config.contacts.length >= 3
-                                  ? null
-                                  : () => _showContactSheet(),
-                          icon: const Icon(Icons.add),
-                          label: const Text('Add Contact'),
+                                Text('${_config.contacts.length}/3'),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            if (_config.contacts.isEmpty)
+                              const EmptyContactsNotice()
+                            else
+                              for (var i = 0; i < _config.contacts.length; i++)
+                                ContactTile(
+                                  contact: _config.contacts[i],
+                                  onEdit:
+                                      () => _showContactSheet(
+                                        contact: _config.contacts[i],
+                                        index: i + 1,
+                                      ),
+                                  onDelete:
+                                      _config.contacts.length <= 1
+                                          ? null
+                                          : () => _deleteContact(i + 1),
+                                ),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed:
+                                  _busy || _config.contacts.length >= 3
+                                      ? null
+                                      : () => _showContactSheet(),
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add Contact'),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  GlassCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SectionTitle(
-                          icon: Icons.terminal,
-                          title: 'Diagnostics',
+                      ),
+                      const SizedBox(height: 16),
+                      GlassCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SectionTitle(
+                              icon: Icons.terminal,
+                              title: 'Diagnostics',
+                            ),
+                            const Text('Last Command'),
+                            SelectableText(_lastCommand),
+                            const SizedBox(height: 12),
+                            const Text('Last Response'),
+                            SelectableText(_lastResponse),
+                          ],
                         ),
-                        const Text('Last Command'),
-                        SelectableText(_lastCommand),
-                        const SizedBox(height: 12),
-                        const Text('Last Response'),
-                        SelectableText(_lastResponse),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
-        ),
+          if (_busy) BusyOverlay(label: _busyLabel),
+        ],
       ),
     );
   }
@@ -1018,6 +1042,35 @@ class GlassCard extends StatelessWidget {
         border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
       ),
       child: child,
+    );
+  }
+}
+
+class BusyOverlay extends StatelessWidget {
+  const BusyOverlay({super.key, required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: AbsorbPointer(
+        child: ColoredBox(
+          color: Colors.black.withValues(alpha: 0.45),
+          child: Center(
+            child: GlassCard(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(label, textAlign: TextAlign.center),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1043,6 +1096,36 @@ class SectionTitle extends StatelessWidget {
             ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class EmptyContactsNotice extends StatelessWidget {
+  const EmptyContactsNotice({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.amber.withValues(alpha: 0.35)),
+      ),
+      child: const Padding(
+        padding: EdgeInsets.all(14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.info_outline, color: Colors.amber),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'At least one family contact is required before the alert system can send family SMS alerts.',
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1089,7 +1172,7 @@ class ContactTile extends StatelessWidget {
 
   final EmergencyContact contact;
   final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1105,12 +1188,88 @@ class ContactTile extends StatelessWidget {
               onPressed: onEdit,
               icon: const Icon(Icons.edit_outlined),
             ),
-            IconButton(
-              onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline),
-            ),
+            if (onDelete != null)
+              IconButton(
+                onPressed: onDelete,
+                icon: const Icon(Icons.delete_outline),
+              ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class ContactEditorSheet extends StatefulWidget {
+  const ContactEditorSheet({super.key, this.contact});
+
+  final EmergencyContact? contact;
+
+  @override
+  State<ContactEditorSheet> createState() => _ContactEditorSheetState();
+}
+
+class _ContactEditorSheetState extends State<ContactEditorSheet> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _phoneController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.contact?.name ?? '');
+    _phoneController = TextEditingController(text: widget.contact?.phone ?? '');
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    Navigator.of(context).pop({
+      'name': _nameController.text.trim(),
+      'phone': _phoneController.text.trim(),
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            widget.contact == null ? 'Add Contact' : 'Edit Contact',
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _nameController,
+            decoration: const InputDecoration(labelText: 'Name'),
+            textInputAction: TextInputAction.next,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _phoneController,
+            decoration: const InputDecoration(labelText: 'Phone'),
+            keyboardType: TextInputType.phone,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _save(),
+          ),
+          const SizedBox(height: 16),
+          FilledButton(onPressed: _save, child: const Text('Save')),
+        ],
       ),
     );
   }
