@@ -60,6 +60,47 @@ python3 -m src.main --help
 
 ---
 
+## Family contacts config
+
+These commands read/write `config/contacts.family.json`. Writes are validated and saved atomically with a `.bak` backup.
+
+```bash
+cd ~/AccidentAlertSystem
+source .venv/bin/activate
+
+# Read current rider info and emergency contacts
+python -m src.contacts_config_store get
+python -m src.contacts_config_store list-contacts
+
+# Update rider info
+python -m src.contacts_config_store set-rider --name "Juan Dela Cruz" --home "Zapote"
+
+# Contacts are limited to 3 family numbers; update first if all slots are full
+python -m src.contacts_config_store update-contact 1 --name "Mom" --phone +639201234567
+python -m src.contacts_config_store delete-contact 3
+python -m src.contacts_config_store add-contact --name "Mom" --phone 09201234567
+
+# Validate only
+python -m src.contacts_config_store validate
+```
+
+For practice, copy the file and pass `--path` before the command so the real contacts are untouched:
+
+```bash
+cp config/contacts.family.json /tmp/contacts.family.test.json
+python -m src.contacts_config_store --path /tmp/contacts.family.test.json update-contact 1 --name "Test" --phone 09201234567
+```
+
+The future phone/Bluetooth service will use JSON commands through the same store:
+
+```bash
+python -m src.contacts_config_protocol '{"op":"get_config"}' --pretty
+python -m src.contacts_config_protocol '{"op":"set_rider","rider_name":"Juan Dela Cruz","subject_home_barangay":"Zapote"}' --pretty
+python -m src.contacts_config_protocol '{"op":"update_contact","index":1,"name":"Mom","phone":"09201234567"}' --pretty
+```
+
+---
+
 ## SMS deploy checklist (after `git pull`)
 
 Use this after updating code so the Pi does **not** keep the old `SMARTSHELL UPDATE` template (causes `BiA@an` and failed delivery).
