@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import audioop
 import contextlib
+import math
 import os
 import sys
 import threading
@@ -286,6 +287,46 @@ def _signal_monitoring_active(*, dry_run: bool, resumed: bool = False) -> None:
     print("[buzzer] Monitor-ready beep skipped (GPIO unavailable or disabled).")
 
 
+def _peak_rotation_dps(eval_data: dict[str, object]) -> float:
+    """Return gyro vector magnitude for the detection sample."""
+    gyro = eval_data.get("gyro_dps")
+    if not isinstance(gyro, dict):
+        return 0.0
+    gx = float(gyro.get("gx", 0.0))
+    gy = float(gyro.get("gy", 0.0))
+    gz = float(gyro.get("gz", 0.0))
+    return math.sqrt(gx * gx + gy * gy + gz * gz)
+
+
+def _log_detection_flow_summary(
+    eval_data: dict[str, object],
+    *,
+    alert_triggered: bool,
+    reason: str,
+) -> None:
+    """Final thesis-table summary for a validated detection flow."""
+    peak_accel_g = float(eval_data["accel_mag_g"])
+    peak_rotation_dps = _peak_rotation_dps(eval_data)
+    label = "Yes" if alert_triggered else "No"
+    logging_store.log_event(
+        {
+            "event": "detection_flow_summary",
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+            "peak_acceleration_g": peak_accel_g,
+            "peak_rotation_dps": peak_rotation_dps,
+            "alert_triggered": alert_triggered,
+            "alert_triggered_label": label,
+            "reason": reason,
+        }
+    )
+    print(
+        "Detection summary: "
+        f"Peak Acceleration={peak_accel_g:.2f}G, "
+        f"Peak Rotation={peak_rotation_dps:.2f} deg/s, "
+        f"Alert Triggered={label}."
+    )
+
+
 def run(
     dry_run: bool = False,
     core_flow_only: bool = False,
@@ -335,6 +376,7 @@ def run(
         test_alert_done = False
         last_alert_cycle_end_at = -1e9
         last_impact_log_at = -1e9
+        last_detection_summary_log_at = -1e9
         while True:
             if test_alert_immediately and not test_alert_done:
                 test_alert_done = True
@@ -397,6 +439,17 @@ def run(
             )
 
             if actual_collision and in_post_alert_cooldown:
+                if (now - last_detection_summary_log_at) >= max(
+                    0.0,
+                    impact_log_cooldown_sec,
+                ):
+                    _log_detection_flow_summary(
+                        eval_data,
+                        alert_triggered=False,
+                        reason="post_alert_cooldown",
+                    )
+                    last_detection_summary_log_at = now
+                time.sleep(poll_interval_sec)
                 continue
 
             if actual_collision:
@@ -420,6 +473,11 @@ def run(
                             "accel_g": eval_data["accel_g"],
                             "gyro_dps": eval_data["gyro_dps"],
                         }
+                    )
+                    _log_detection_flow_summary(
+                        eval_data,
+                        alert_triggered=False,
+                        reason="core_flow_only",
                     )
                 else:
                     print("Collision conditions met. Playing countdown audio now.")
@@ -456,6 +514,11 @@ def run(
                     finally:
                         last_alert_cycle_end_at = time.monotonic()
                     _signal_monitoring_active(dry_run=dry_run, resumed=True)
+                    _log_detection_flow_summary(
+                        eval_data,
+                        alert_triggered=True,
+                        reason="alert_flow_completed",
+                    )
             time.sleep(poll_interval_sec)
     except KeyboardInterrupt:
         print("\nStopped.")
