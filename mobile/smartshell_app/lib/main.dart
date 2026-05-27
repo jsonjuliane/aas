@@ -674,8 +674,6 @@ class _ConfigHomeScreenState extends State<ConfigHomeScreen> {
   bool _busy = false;
   String _busyLabel = 'Working...';
   String _currentPin = '';
-  String _lastCommand = '{"op":"get_config"}';
-  String _lastResponse = 'Connected.';
 
   @override
   void initState() {
@@ -702,7 +700,6 @@ class _ConfigHomeScreenState extends State<ConfigHomeScreen> {
     setState(() {
       _busy = true;
       _busyLabel = busyLabel;
-      _lastCommand = const JsonEncoder.withIndent('  ').convert(command);
     });
 
     final ConfigResponse response;
@@ -712,7 +709,6 @@ class _ConfigHomeScreenState extends State<ConfigHomeScreen> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _lastResponse = 'Request failed: $e';
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -732,7 +728,6 @@ class _ConfigHomeScreenState extends State<ConfigHomeScreen> {
 
     setState(() {
       _busy = false;
-      _lastResponse = const JsonEncoder.withIndent('  ').convert(response.raw);
       if (response.ok && command['op'] == 'change_pin') {
         _currentPin = '${command['new_pin']}';
         _newPinController.clear();
@@ -994,23 +989,6 @@ class _ConfigHomeScreenState extends State<ConfigHomeScreen> {
                               icon: const Icon(Icons.add),
                               label: const Text('Add Contact'),
                             ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      GlassCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SectionTitle(
-                              icon: Icons.terminal,
-                              title: 'Diagnostics',
-                            ),
-                            const Text('Last Command'),
-                            SelectableText(_lastCommand),
-                            const SizedBox(height: 12),
-                            const Text('Last Response'),
-                            SelectableText(_lastResponse),
                           ],
                         ),
                       ),
