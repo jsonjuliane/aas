@@ -23,7 +23,6 @@ _DEPRECATED_MARKERS = (
 _EXPECTED_MARKERS = (
     "SMARTSHELL COLLISION ALERT",
     "Rider:",
-    "{area}",
     "GPS:",
 )
 

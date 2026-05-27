@@ -106,8 +106,8 @@ class MockConfigTransport implements ConfigTransport {
     messageTemplate:
         'SMARTSHELL COLLISION ALERT\n\n'
         'Rider: {name}\n'
-        'Area: {area}\n'
-        'Home: {home_barangay} | Accident: {accident_barangay}\n\n'
+        'Home: {home_barangay}\n'
+        'Accident: {accident_barangay}\n\n'
         'GPS: {map_url}',
   );
 

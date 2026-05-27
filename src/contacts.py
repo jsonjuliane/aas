@@ -25,7 +25,6 @@ from src.config import (
 _DEFAULT_TEMPLATE = (
     "SMARTSHELL UPDATE: COLLISION DETECTED\n"
     "Name: {name}\n"
-    "Area: {area}\n"
     "Home barangay: {home_barangay}\n"
     "Accident barangay: {accident_barangay}\n"
     "Notified: {notified}\n"
@@ -40,7 +39,7 @@ def load_family_contacts() -> tuple[list[str], str, str, str]:
 
     Returns:
         Tuple of (phones, message_template, rider_name, subject_home_barangay).
-        Placeholders: {name}, {area}, {home_barangay}, {accident_barangay}, {notified}, {date}, {map_url}.
+        Placeholders: {name}, {home_barangay}, {accident_barangay}, {notified}, {date}, {map_url}.
 
     Raises:
         FileNotFoundError: If contacts file not found.
@@ -205,13 +204,13 @@ def format_message(
 
 
 # Production collision SMS (GSM 7-bit, single-part, no https URL — Globe blocks map links).
-# Placeholders: {name} {area} {home_barangay} {accident_barangay} {map_url} (lat, lon only).
+# Placeholders: {name} {home_barangay} {accident_barangay} {map_url} (lat, lon only).
 FINAL_SMS_ALERT_TEMPLATE = (
     "SMARTSHELL COLLISION ALERT\n"
     "\n"
     "Rider: {name}\n"
-    "Area: {area}\n"
-    "Home: {home_barangay} | Accident: {accident_barangay}\n"
+    "Home: {home_barangay}\n"
+    "Accident: {accident_barangay}\n"
     "\n"
     "GPS: {map_url}"
 )
@@ -279,7 +278,6 @@ def format_alert_message(
     """
     limit = int(SMS_ALERT_TARGET_MAX_CHARS if max_chars is None else max_chars)
     safe_name = sms_safe_for_gsm7(rider_name)
-    safe_area = sms_safe_for_gsm7(area)
     safe_home = sms_safe_for_gsm7(home_barangay)
     safe_accident = sms_safe_for_gsm7(accident_barangay or "")
 
@@ -291,7 +289,7 @@ def format_alert_message(
                 lon,
                 rider_name=safe_name,
                 home_barangay=safe_home,
-                area=safe_area,
+                area=sms_safe_for_gsm7(area),
                 accident_barangay=safe_accident or None,
                 notified=sms_safe_for_gsm7(notified),
                 map_precision=map_precision,
@@ -311,8 +309,8 @@ def format_alert_message(
     body = (
         "SMARTSHELL COLLISION ALERT\n\n"
         f"Rider: {safe_name[:28]}\n"
-        f"Area: {safe_area[:28]}\n"
-        f"Home: {safe_home[:14]} | Accident: {(safe_accident or 'N/A')[:14]}\n\n"
+        f"Home: {safe_home[:20]}\n"
+        f"Accident: {(safe_accident or 'N/A')[:34]}\n\n"
         f"GPS: {short_map}"
     )
     if len(body) > limit:

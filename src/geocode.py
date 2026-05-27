@@ -27,30 +27,46 @@ _USER_AGENT = "SmartShellAccidentAlert/1.0 (thesis prototype; collision SMS only
 
 
 def _short_label_from_address(address: dict[str, object]) -> str:
-    """Build a compact street/area label from Nominatim address parts."""
+    """Build a compact but detailed street-level label from Nominatim parts."""
+
+    def _pick(*keys: str) -> str:
+        for key in keys:
+            val = address.get(key)
+            if val:
+                text = str(val).strip()
+                if text:
+                    return text
+        return ""
+
+    house_num = _pick("house_number")
+    building = _pick("building", "amenity")
+    road = _pick("road", "pedestrian", "footway", "residential")
+    local = _pick("neighbourhood", "suburb", "village", "city_district")
+    city = _pick("city", "municipality", "town")
+
     parts: list[str] = []
-    for key in (
-        "road",
-        "pedestrian",
-        "footway",
-        "residential",
-        "neighbourhood",
-        "suburb",
-        "village",
-        "city_district",
-        "city",
-        "municipality",
-        "town",
-    ):
-        val = address.get(key)
-        if not val:
-            continue
-        text = str(val).strip()
-        if text and text not in parts:
-            parts.append(text)
-        if len(parts) >= 2:
-            break
-    return ", ".join(parts)
+    street = ""
+    if house_num and road:
+        street = f"{house_num} {road}"
+    elif road:
+        street = road
+    elif house_num and building:
+        street = f"{house_num} {building}"
+    elif building:
+        street = building
+    if street:
+        parts.append(street)
+    if local and local not in parts:
+        parts.append(local)
+    elif city and city not in parts:
+        parts.append(city)
+
+    if len(parts) < 2 and building and building not in parts:
+        parts.append(building)
+    if len(parts) < 2 and city and city not in parts:
+        parts.append(city)
+
+    return ", ".join(parts[:2])
 
 
 def reverse_geocode_short_address(

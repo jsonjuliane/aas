@@ -63,8 +63,8 @@ def build_matrix_cases() -> list[SmsMatrixCase]:
     formal_static = (
         "SMARTSHELL COLLISION ALERT\n\n"
         "Rider: Juan Dela Cruz\n"
-        "Area: Inside Binan\n"
-        "Home: Zapote | Accident: Sto. Domingo\n\n"
+        "Home: Zapote\n"
+        "Accident: Sto. Domingo\n\n"
         "GPS: 14.3331, 121.0854"
     )
 
@@ -139,7 +139,7 @@ def build_matrix_cases() -> list[SmsMatrixCase]:
         SmsMatrixCase(
             "17",
             "colon pipe special chars",
-            _tag("17", "Home: Zapote | Accident: Sto. Domingo"),
+            _tag("17", "Home: Zapote\nAccident: Sto. Domingo"),
         ),
         SmsMatrixCase(
             "18",

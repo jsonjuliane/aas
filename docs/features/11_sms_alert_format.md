@@ -12,8 +12,8 @@
 SMARTSHELL COLLISION ALERT
 
 Rider: {name}
-Area: {area}
-Home: {home_barangay} | Accident: {accident_barangay}
+Home: {home_barangay}
+Accident: {accident_barangay}
 
 GPS: {map_url}
 ```
@@ -44,8 +44,8 @@ All **24** Biñan barangays are in the centroid/boundary configs; rescuer phones
 SMARTSHELL COLLISION ALERT
 
 Rider: Juan Dela Cruz
-Area: Inside Binan
-Home: Zapote | Accident: Sto. Domingo
+Home: Zapote
+Accident: Sto. Domingo
 
 GPS: 14.3331, 121.0854
 ```
@@ -63,7 +63,7 @@ Duplicate numbers are sent **once** per alert.
 
 ### Example (outside Biñan or no GPS)
 
-Same template; `Area` may be `Outside Binan` or `Unknown (no GPS)`; `Accident` may be `N/A`. Only **family + home** rescuer phones (no accident barangay rescuer).
+Same template; `Accident` may be `N/A` only when no GPS fix exists. Only **family + home** rescuer phones (no accident barangay rescuer).
 
 ## Testing configuration
 
