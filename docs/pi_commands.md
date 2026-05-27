@@ -287,7 +287,10 @@ python -m src.sms_config_check
 
 # 3) Send one real-format alert to your phone (no [SSnn] tag):
 python -m src.sms_config_check --send-test +639XXXXXXXXX
-# Or: python -m src.gsm_test --send-alert-sms +639XXXXXXXXX
+# Preview only (no modem, no SMS; shows geocode vs barangay source):
+python -m src.gsm_test --send-alert-sms +639XXXXXXXXX --dry-run --verbose
+# Or send real alert (uses --test-lat/--test-lon + production resolver):
+python -m src.gsm_test --send-alert-sms +639XXXXXXXXX
 
 # 4) Full collision test (optional):
 python -m src.main --test-alert --test-lat-lng 14.333 121.085 --disable-sms-send

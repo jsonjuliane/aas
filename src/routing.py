@@ -216,17 +216,21 @@ def resolve_accident_barangay(lat: float, lon: float) -> tuple[str | None, str]:
 
 
 def _reverse_geocode_street_address(lat: float, lon: float) -> str | None:
+    from src import geocode
+
     if not REVERSE_GEOCODE_ENABLED:
+        if geocode.geocode_debug_enabled():
+            print("[geocode] skipped (REVERSE_GEOCODE_ENABLED=False)")
         return None
     try:
-        from src import geocode
-
         return geocode.reverse_geocode_short_address_with_retries(
             float(lat),
             float(lon),
             max_len=SMS_ACCIDENT_ADDRESS_MAX_CHARS,
         )
-    except Exception:
+    except Exception as e:
+        if geocode.geocode_debug_enabled():
+            print(f"[geocode] resolver error: {type(e).__name__}: {e}")
         return None
 
 

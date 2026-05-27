@@ -8,6 +8,7 @@ Requires internet on the Pi at alert time.
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -24,6 +25,20 @@ from src.contacts import sms_safe_for_gsm7
 
 _NOMINATIM_REVERSE = "https://nominatim.openstreetmap.org/reverse"
 _USER_AGENT = "SmartShellAccidentAlert/1.0 (thesis prototype; collision SMS only)"
+
+
+def geocode_debug_enabled() -> bool:
+    """True when SMARTSHELL_DEBUG_GEOCODE=1 (or true/yes)."""
+    return os.environ.get("SMARTSHELL_DEBUG_GEOCODE", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+
+def _geocode_debug(msg: str) -> None:
+    if geocode_debug_enabled():
+        print(f"[geocode] {msg}")
 
 
 def _short_label_from_address(address: dict[str, object]) -> str:
@@ -96,7 +111,8 @@ def reverse_geocode_short_address(
     try:
         with urllib.request.urlopen(req, timeout=max(1.0, float(timeout_sec))) as resp:
             data = json.loads(resp.read().decode("utf-8", errors="replace"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
+        _geocode_debug(f"Nominatim request failed: {type(e).__name__}: {e}")
         return None
 
     address = data.get("address")
@@ -136,7 +152,12 @@ def reverse_geocode_short_address_with_retries(
     delay = max(0.0, float(retry_delay_sec if retry_delay_sec is not None else REVERSE_GEOCODE_RETRY_DELAY_SEC))
     per_try_timeout = float(timeout_sec if timeout_sec is not None else REVERSE_GEOCODE_TIMEOUT_SEC)
     last: str | None = None
+    _geocode_debug(
+        f"reverse geocode lat={float(lat):.6f} lon={float(lon):.6f} "
+        f"attempts={attempts} timeout={per_try_timeout}s"
+    )
     for idx in range(attempts):
+        _geocode_debug(f"attempt {idx + 1}/{attempts}")
         last = reverse_geocode_short_address(
             float(lat),
             float(lon),
@@ -144,7 +165,9 @@ def reverse_geocode_short_address_with_retries(
             max_len=max_len,
         )
         if last:
+            _geocode_debug(f"ok label={last!r}")
             return last
         if idx < attempts - 1 and delay > 0:
             time.sleep(delay)
+    _geocode_debug("no label (exhausted retries or empty Nominatim response)")
     return last
