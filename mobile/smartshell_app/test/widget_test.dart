@@ -87,6 +87,9 @@ void main() {
     );
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
+    expect(find.text('Family contact added successfully.'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'OK'));
+    await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
     expect(find.text('Dad'), findsOneWidget);

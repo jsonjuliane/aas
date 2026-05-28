@@ -693,7 +693,7 @@ class _ConfigHomeScreenState extends State<ConfigHomeScreen> {
     super.dispose();
   }
 
-  Future<void> _send(
+  Future<bool> _send(
     Map<String, dynamic> command, {
     String busyLabel = 'Working...',
   }) async {
@@ -706,7 +706,7 @@ class _ConfigHomeScreenState extends State<ConfigHomeScreen> {
     try {
       response = await widget.transport.send({...command, 'pin': _currentPin});
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _busy = false;
       });
@@ -716,10 +716,10 @@ class _ConfigHomeScreenState extends State<ConfigHomeScreen> {
           backgroundColor: Colors.red.shade700,
         ),
       );
-      return;
+      return false;
     }
 
-    if (!mounted) return;
+    if (!mounted) return false;
     final nextConfig = response.config;
     if (response.ok && nextConfig != null) {
       _riderController.text = nextConfig.riderName;
@@ -744,18 +744,37 @@ class _ConfigHomeScreenState extends State<ConfigHomeScreen> {
         ),
       );
     }
+    return response.ok;
   }
 
-  Future<void> _saveRider() {
-    return _send({
+  Future<void> _showActionSuccessDialog(String message) async {
+    await showDialog<void>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Success'),
+            content: Text(message),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Future<void> _saveRider() async {
+    await _send({
       'op': 'set_rider',
       'rider_name': _riderController.text.trim(),
       'subject_home_barangay': _homeController.text.trim(),
     }, busyLabel: 'Saving rider info...');
   }
 
-  Future<void> _reload() =>
-      _send({'op': 'get_config'}, busyLabel: 'Reloading config...');
+  Future<void> _reload() async {
+    await _send({'op': 'get_config'}, busyLabel: 'Reloading config...');
+  }
 
   Future<void> _changePin() async {
     final newPin = _newPinController.text.trim();
@@ -799,16 +818,22 @@ class _ConfigHomeScreenState extends State<ConfigHomeScreen> {
     if (!mounted) return;
     if (result == null) return;
     if (contact == null) {
-      await _send({
+      final ok = await _send({
         'op': 'add_contact',
         ...result,
       }, busyLabel: 'Adding contact...');
+      if (ok && mounted) {
+        await _showActionSuccessDialog('Family contact added successfully.');
+      }
     } else {
-      await _send({
+      final ok = await _send({
         'op': 'update_contact',
         'index': index,
         ...result,
       }, busyLabel: 'Saving contact...');
+      if (ok && mounted) {
+        await _showActionSuccessDialog('Family contact updated successfully.');
+      }
     }
   }
 
@@ -845,10 +870,13 @@ class _ConfigHomeScreenState extends State<ConfigHomeScreen> {
     );
     if (!mounted) return;
     if (ok == true) {
-      await _send({
+      final deleted = await _send({
         'op': 'delete_contact',
         'index': index,
       }, busyLabel: 'Deleting contact...');
+      if (deleted && mounted) {
+        await _showActionSuccessDialog('Family contact deleted successfully.');
+      }
     }
   }
 
