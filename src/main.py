@@ -327,6 +327,22 @@ def _log_detection_flow_summary(
     )
 
 
+def _bench_detection_sample(sensor: sensor_mpu6050.SensorMPU6050) -> dict[str, object]:
+    """Best-effort sample used for --test-alert detection summary."""
+    try:
+        eval_data = sensor.evaluate_impact()
+        accel_mag = float(eval_data.get("accel_mag_g", 0.0))
+        gyro = eval_data.get("gyro_dps")
+        if not isinstance(gyro, dict):
+            gyro = {"gx": 0.0, "gy": 0.0, "gz": 0.0}
+        return {"accel_mag_g": accel_mag, "gyro_dps": gyro}
+    except Exception:
+        return {
+            "accel_mag_g": 0.0,
+            "gyro_dps": {"gx": 0.0, "gy": 0.0, "gz": 0.0},
+        }
+
+
 def run(
     dry_run: bool = False,
     core_flow_only: bool = False,
@@ -380,9 +396,15 @@ def run(
         while True:
             if test_alert_immediately and not test_alert_done:
                 test_alert_done = True
+                bench_eval_data = _bench_detection_sample(sensor)
                 print("[test-alert] Bench mode: triggering the countdown flow now.")
                 if core_flow_only:
                     print("[core-flow] Test trigger reached. Action audio is skipped in this mode.")
+                    _log_detection_flow_summary(
+                        bench_eval_data,
+                        alert_triggered=False,
+                        reason="test_alert_core_flow_only",
+                    )
                 else:
                     try:
                         _handle_alert(
@@ -399,6 +421,11 @@ def run(
                         last_alert_cycle_end_at = time.monotonic()
                     if not core_flow_only:
                         _signal_monitoring_active(dry_run=dry_run, resumed=True)
+                    _log_detection_flow_summary(
+                        bench_eval_data,
+                        alert_triggered=True,
+                        reason="test_alert_manual_trigger",
+                    )
                 continue
 
             eval_data = sensor.evaluate_impact()

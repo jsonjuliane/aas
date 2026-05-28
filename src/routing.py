@@ -262,6 +262,17 @@ def _truncate_sms_label(text: str, max_len: int) -> str:
     return label[: max(0, limit - 3)].rstrip() + "..."
 
 
+def _append_barangay_if_missing(label: str, barangay_name: str | None) -> str:
+    """Append barangay to accident label when available and not already present."""
+    base = (label or "").strip()
+    brgy = (barangay_name or "").strip()
+    if not base or not brgy:
+        return base
+    if brgy.lower() in base.lower():
+        return base
+    return f"{base}, {brgy}"
+
+
 def resolve_accident_sms_address_mode(
     lat: float | None,
     lon: float | None,
@@ -349,20 +360,24 @@ def resolve_accident_sms_address(
         return "N/A", details
 
     flat, flon = float(lat), float(lon)
-    address = _reverse_geocode_street_address(flat, flon)
-    details["address"] = address
-    if address:
-        details["source"] = "geocode"
-        return _truncate_sms_label(address, SMS_ACCIDENT_ADDRESS_MAX_CHARS), details
-
+    brgy: str | None = None
+    method = "none"
     if is_inside_binan(flat, flon):
         brgy, method = resolve_accident_barangay(flat, flon)
         details["barangay"] = brgy
         details["barangay_method"] = method
-        if brgy:
-            details["source"] = f"barangay_{method}"
-            label = _barangay_sms_fallback_label(brgy, method)
-            return _truncate_sms_label(label, SMS_ACCIDENT_ADDRESS_MAX_CHARS), details
+
+    address = _reverse_geocode_street_address(flat, flon)
+    details["address"] = address
+    if address:
+        details["source"] = "geocode"
+        label = _append_barangay_if_missing(address, brgy)
+        return _truncate_sms_label(label, SMS_ACCIDENT_ADDRESS_MAX_CHARS), details
+
+    if brgy:
+        details["source"] = f"barangay_{method}"
+        label = _barangay_sms_fallback_label(brgy, method)
+        return _truncate_sms_label(label, SMS_ACCIDENT_ADDRESS_MAX_CHARS), details
 
     details["source"] = "coordinates"
     coord_label = _coord_fallback_label(flat, flon)
