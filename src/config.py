@@ -52,7 +52,7 @@ MP3_DEFAULT_VOLUME = 12  # DFPlayer range 0..30; applied before countdown play i
 CANCEL_BUTTON_GPIO = 17  # Wire momentary switch between GPIO17 and GND
 
 # Optional buzzer fallback for countdown cues (GPIO -> transistor/active buzzer)
-BUZZER_GPIO = 18
+BUZZER_GPIO = 27  # BCM 27 (Pi Zero W physical pin 13)
 BUZZER_ACTIVE_HIGH = True  # Buzzer silent at LOW, on at HIGH (confirmed by buzzer_diag)
 BUZZER_COUNTDOWN_ENABLED = True
 BUZZER_BEEP_SEC = 0.08

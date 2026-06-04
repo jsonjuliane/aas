@@ -19,7 +19,7 @@ _SAFE_SCAN_PINS = [4, 5, 6, 12, 13, 16, 18, 22, 23, 24, 25, 27]
 # Project-reserved (shown in warning but not blocked from --pin test)
 _PROJECT_PINS = {
     14: "GSM TX", 15: "GSM RX",
-    17: "cancel button", 18: "buzzer",
+    17: "cancel button", 27: "buzzer",
     19: "MP3 TX", 20: "GPS RX", 21: "GPS TX", 26: "MP3 RX",
     2: "MPU SDA", 3: "MPU SCL",
 }
@@ -151,7 +151,7 @@ def project_config_check() -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Buzzer GPIO diagnostic")
-    ap.add_argument("--pin", type=int, default=18, help="BCM GPIO pin to test (default 18)")
+    ap.add_argument("--pin", type=int, default=None, help="BCM GPIO pin to test (default: BUZZER_GPIO from config)")
     ap.add_argument("--hold-sec", type=float, default=3.0, help="Seconds to hold each state")
     ap.add_argument("--scan", action="store_true", help="Sweep all safe GPIO pins to find buzzer pin")
     ap.add_argument("--interactive", action="store_true", help="Hold each state until Enter is pressed")
@@ -159,12 +159,18 @@ def main() -> int:
 
     project_config_check()
 
+    pin = args.pin
+    if pin is None:
+        from src.config import BUZZER_GPIO
+
+        pin = BUZZER_GPIO
+
     if args.scan:
         scan_pins(hold_sec=max(0.5, args.hold_sec))
     elif args.interactive:
-        polarity_check(args.pin)
+        polarity_check(pin)
     else:
-        test_pin(args.pin, hold_sec=max(1.0, args.hold_sec))
+        test_pin(pin, hold_sec=max(1.0, args.hold_sec))
 
     return 0
 
