@@ -19,7 +19,7 @@ _SAFE_SCAN_PINS = [4, 5, 6, 12, 13, 16, 18, 22, 23, 24, 25, 27]
 # Project-reserved (shown in warning but not blocked from --pin test)
 _PROJECT_PINS = {
     14: "GSM TX", 15: "GSM RX",
-    17: "cancel button", 27: "buzzer",
+    17: "cancel button", 5: "buzzer",
     19: "MP3 TX", 20: "GPS RX", 21: "GPS TX", 26: "MP3 RX",
     2: "MPU SDA", 3: "MPU SCL",
 }
