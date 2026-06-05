@@ -30,7 +30,7 @@ For the phased plan, see `docs/PLAN.md`. **Prototype hardware** (BOM, pins, powe
 | 9 | — | GND | SIM800L | GND |
 | 10 | 15 | UART RXD0 | SIM800L | TXD |
 | 11 | 17 | GPIO | Cancel button | Other leg to GND |
-| 12 | 18 | GPIO | Buzzer I/O | Active-high; VCC to 5V rail |
+| 13 | 27 | GPIO | Buzzer I/O | Active-high; VCC to 5V rail |
 | 14 | — | GND | MPU-6050 | GND |
 | 30 | — | GND | MP3 player | GND |
 | 35 | 19 | GPIO | MP3 player | TX (Pi → module RX) |
@@ -237,7 +237,7 @@ Thonny and manual `python -m src.main` are for development. On the helmet, use *
 
 ### Buzzer silence service (required if buzzer is wired)
 
-GPIO 18 floats HIGH at boot, turning on the buzzer before Python starts. Install a oneshot service that runs earlier:
+GPIO 27 floats HIGH at boot, turning on the buzzer before Python starts. Install a oneshot service that runs earlier:
 
 ```bash
 sudo cp deploy/smartshell-buzzer-silence.service.example \
@@ -257,8 +257,8 @@ Full product hardening (watchdogs, incoming-SMS responder loop) stays in later p
 
 - `src/main.py` — runnable entrypoint (Phase 1): impact detection → countdown → cancel window → GPS + SMS
 - `src/voice_cancel.py` — background Google STT keyword cancel (“cancel” to abort countdown)
-- `src/buzzer_hw.py` — countdown tick beeps on GPIO 18
-- `src/buzzer_silence.py` — boot-time GPIO 18 silence script
+- `src/buzzer_hw.py` — countdown tick beeps on GPIO 27
+- `src/buzzer_silence.py` — boot-time GPIO 27 silence script
 - `src/cancel.py` — GPIO 17 cancel button
 - `deploy/smartshell.service.example` — `systemd` unit for main app boot autostart
 - `deploy/smartshell-buzzer-silence.service.example` — `systemd` oneshot for buzzer silence at boot

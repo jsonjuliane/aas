@@ -352,7 +352,7 @@ python -m src.mp3_diag                          # Full MP3-TF-16P bench diagnost
 
 # Buzzer
 python -m src.buzzer_diag                       # Interactive polarity scan and GPIO sweep
-python -m src.buzzer_silence                    # Immediately silence GPIO 18
+python -m src.buzzer_silence                    # Immediately silence GPIO 27
 python -m src.buzzer_silence --beep             # One beep then silence
 python -m src.buzzer_silence --verify           # Print current GPIO state
 
@@ -594,7 +594,7 @@ See `deploy/smartshell.service.example` and **Start on boot (`systemd`)** in `RE
 
 ### Buzzer silence service (recommended if buzzer wired)
 
-GPIO 18 floats HIGH at boot, which turns on an active-high buzzer before Python starts. Install a oneshot service to silence it early:
+GPIO 27 floats HIGH at boot, which turns on an active-high buzzer before Python starts. Install a oneshot service to silence it early:
 
 ```bash
 sudo cp deploy/smartshell-buzzer-silence.service.example /etc/systemd/system/smartshell-buzzer-silence.service
@@ -608,7 +608,7 @@ sudo systemctl status smartshell-buzzer-silence.service
 Test manually:
 
 ```bash
-python -m src.buzzer_silence            # drive GPIO 18 low (silent)
+python -m src.buzzer_silence            # drive GPIO 27 low (silent)
 python -m src.buzzer_silence --verify   # print current GPIO state
 ```
 

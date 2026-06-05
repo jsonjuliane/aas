@@ -14,7 +14,7 @@ This document describes the Phase 1 codebase and how to run it.
 | Audio | `src/audio_mp3.py` | DFPlayer `play_track()` (reserved for future use) |
 | Cancel (button) | `src/cancel.py` | GPIO button `wait_for_cancel()` — GPIO 17, active-low |
 | Cancel (voice) | `src/voice_cancel.py` | Background keyword listener ("cancel"); Vosk offline first, PocketSphinx fallback, Google fallback |
-| Buzzer | `src/buzzer_hw.py` | Countdown tick beeps on GPIO 18 |
+| Buzzer | `src/buzzer_hw.py` | Countdown tick beeps on GPIO 27 |
 | Contacts | `src/contacts.py` | Load family contacts, format message |
 | Logging | `src/logging_store.py` | `log_event()` |
 | Main | `src/main.py` | Entry point, main loop |
@@ -50,7 +50,7 @@ Legacy `--trigger` is accepted as an alias for `--test-alert`.
 ## Boot autostart
 
 1. **Main app**: `deploy/smartshell.service.example` — see **Start on boot (`systemd`)** in `README.md`.
-2. **Buzzer silence**: `deploy/smartshell-buzzer-silence.service.example` — runs before the main app to drive GPIO 18 LOW at boot. See `docs/features/05_buzzer.md`.
+2. **Buzzer silence**: `deploy/smartshell-buzzer-silence.service.example` — runs before the main app to drive GPIO 27 LOW at boot. See `docs/features/05_buzzer.md`.
 
 ---
 

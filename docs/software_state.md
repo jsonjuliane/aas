@@ -11,7 +11,7 @@
 | **Audio** | `audio_mp3.py` | DFPlayer-style on UART | `play_track(N)` → `mp3/000N.mp3` on the SD card (command 0x03); kernel serial **or** pigpio GPIO TX when `MP3_SERIAL_PORT=None` (GPIO19 wiring). MP3 module reserved for future use. |
 | **Cancel (button)** | `cancel.py` | GPIO **17** (optional button) | Active-low with internal pull-up. Wire a momentary switch between GPIO17 and GND. |
 | **Cancel (voice)** | `voice_cancel.py` | USB mic (e.g. USB Audio Device) | Background keyword listener; says "cancel" to abort the countdown. Prefers offline Vosk, then PocketSphinx, then Google STT in `auto` mode. Configured in `config.py`. |
-| **Buzzer** | `buzzer_hw.py` | GPIO **18** (active-high buzzer) | Countdown tick beeps; each beep is GPIO.setup → drive → GPIO.cleanup. Silence ensured on startup via `buzzer_silence.py`. |
+| **Buzzer** | `buzzer_hw.py` | GPIO **27** (active-high buzzer) | Countdown tick beeps; each beep is GPIO.setup → drive → GPIO.cleanup. Silence ensured on startup via `buzzer_silence.py`. |
 | **Contacts** | `contacts.py` | — | Loads `config/contacts.family.json` (family SMS list + template). |
 | **Logging** | `logging_store.py` | — | Appends JSON lines under `logs/`. |
 | **Config** | `config.py` | Pin + path constants | Single place for GPIO, baud, serial device paths, voice/buzzer thresholds. |
@@ -30,7 +30,7 @@
 3. **Config:** `config/contacts.family.json` exists with valid numbers; optional `subject_home_barangay` for future routing.  
 4. **Serial paths:** **`GPS_SERIAL_PORT=None`** and **`MP3_SERIAL_PORT=None`** use pigpio GPIO software UART (GPS on GPIO20/21, MP3 TX on GPIO19). If using USB adapters, set to `/dev/ttyUSB*`. Do not point GPS and GSM at the same `ttyS0`.  
 5. **Cancel button:** Wire a momentary switch to **GPIO 17** + GND (or change `CANCEL_BUTTON_GPIO`).  
-6. **Buzzer:** Wire active-high buzzer I/O pin to **GPIO 18** (Pin 12). Set up boot-time silence service (`deploy/smartshell-buzzer-silence.service.example`).  
+6. **Buzzer:** Wire active-high buzzer I/O pin to **GPIO 27** (Pin 13). Set up boot-time silence service (`deploy/smartshell-buzzer-silence.service.example`).  
 7. **Voice cancel:** Requires USB microphone. Offline keyword cancel uses Vosk model when supported, otherwise PocketSphinx (useful on `armv6l`); Google STT fallback needs internet. Tuned thresholds: `VOICE_KEYWORD_MIN_RMS = 6500`, `VOICE_SOUND_RMS_THRESHOLD = 10000`. Run `python -m src.mic_test --baseline` to re-tune.
 
 Then run:
@@ -48,7 +48,7 @@ Expected: continuous monitoring; 3–5g candidates are logged with flags; valida
 | Spec | Code status |
 |------|-------------|
 | Voice "cancel" | **Implemented** — background keyword listener in `voice_cancel.py`; Vosk offline first, PocketSphinx fallback, Google fallback. |
-| Buzzer countdown | **Implemented** — GPIO18 active-high buzzer in `buzzer_hw.py`; tick beeps per second. |
+| Buzzer countdown | **Implemented** — GPIO27 active-high buzzer in `buzzer_hw.py`; tick beeps per second. |
 | MP3 countdown audio | Wired (`audio_mp3.py`); DFPlayer serial TX implemented; RX feedback path unreliable on hardware (level-shift issue). Reserved for future fix. |
 | Inside/outside Biñan (geofence) | **Implemented** — `routing.py`; SMS `Area:` line + `routing_decision` log. |
 | Home + accident barangay rescuer SMS | **Implemented** — `get_recipients`; accident barangay via `barangay_centroids.binan.json` when inside Biñan. |

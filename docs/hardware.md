@@ -42,7 +42,7 @@ Same as `README.md` / `src/config.py`:
 | 9 | — | GND | SIM800L |
 | 10 | 15 | RXD0 | SIM800L TXD |
 | 11 | 17 | GPIO | Cancel button (other leg to GND; internal pull-up) |
-| 12 | 18 | GPIO | Buzzer I/O (active-high; VCC to 5 V rail, GND to common) |
+| 13 | 27 | GPIO | Buzzer I/O (active-high; VCC to 5 V rail, GND to common) |
 | 14 | — | GND | MPU-6050 |
 | 30 | — | GND | MP3 GND |
 | 35 | 19 | GPIO | MP3 TX (Pi → module RX) |

@@ -2,7 +2,7 @@
 
 ## Overview
 
-An **active-high piezo buzzer** wired to GPIO 18 provides audible countdown cues during the alert window. Each second of the 10-second countdown fires one beep; the final 3 seconds use a slightly longer beep to signal urgency.
+An **active-high piezo buzzer** wired to GPIO 27 provides audible countdown cues during the alert window. Each second of the 10-second countdown fires one beep; the final 3 seconds use a slightly longer beep to signal urgency.
 
 The buzzer can be used alongside or instead of MP3 audio — it requires no serial module or SD card.
 
@@ -12,21 +12,21 @@ The buzzer can be used alongside or instead of MP3 audio — it requires no seri
 
 | Item | Value |
 |------|-------|
-| GPIO | 18 (configurable via `BUZZER_GPIO`) — Pi physical pin 12 |
+| GPIO | 27 (configurable via `BUZZER_GPIO`) — Pi physical pin 13 |
 | Buzzer type | Active-high (sounds at HIGH, silent at LOW) |
 | VCC | 5 V rail |
 | GND | Common ground |
 
 **Wiring:**  
 - Buzzer VCC → 5 V rail  
-- Buzzer I/O → GPIO 18 (Pin 12)  
+- Buzzer I/O → GPIO 27 (Pin 13)  
 - Buzzer GND → common GND
 
 ---
 
 ## Boot-time silencing
 
-GPIO 18 floats HIGH at boot before any Python code runs, which would turn on the buzzer. A dedicated oneshot service drives it LOW before the main app starts:
+GPIO 27 floats HIGH at boot before any Python code runs, which would turn on the buzzer. A dedicated oneshot service drives it LOW before the main app starts:
 
 ```bash
 # Install and enable the boot-silence service
@@ -62,7 +62,7 @@ Each function does its own GPIO setup, drives the pin, then calls `GPIO.cleanup(
 
 | Constant | Default | Purpose |
 |----------|---------|---------|
-| `BUZZER_GPIO` | `18` | BCM GPIO for buzzer |
+| `BUZZER_GPIO` | `27` | BCM GPIO for buzzer |
 | `BUZZER_ACTIVE_HIGH` | `True` | Buzzer sounds at HIGH (confirmed via `buzzer_diag`) |
 | `BUZZER_COUNTDOWN_ENABLED` | `True` | Enable tick beeps during countdown |
 | `BUZZER_BEEP_SEC` | `0.08` | Beep duration for seconds > 3 |
